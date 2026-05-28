@@ -1,0 +1,95 @@
+:root {
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --accent: #4f46e5;
+    --accent-dark: #4338ca;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+}
+
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 2rem;
+    background: var(--accent);
+    color: #fff;
+}
+
+.topbar h1 { margin: 0; font-size: 1.4rem; }
+.auth-status { font-size: .9rem; opacity: .9; }
+
+main {
+    max-width: 900px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    display: grid;
+    gap: 1.5rem;
+}
+
+.card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+}
+
+.card h2 { margin-top: 0; }
+
+form { display: flex; flex-direction: column; gap: .75rem; max-width: 360px; }
+label { display: flex; flex-direction: column; gap: .25rem; font-size: .9rem; color: var(--muted); }
+
+input {
+    padding: .55rem .7rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+button {
+    padding: .55rem 1rem;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: .95rem;
+    cursor: pointer;
+}
+button:hover { background: var(--accent-dark); }
+button.secondary { background: #e5e7eb; color: var(--text); }
+
+.search-row { display: flex; gap: .5rem; margin-bottom: 1rem; }
+.search-row input { flex: 1; }
+
+.pet-list, .message-list { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; }
+
+.pet-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: .75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+.pet-list .price { font-weight: 600; color: var(--accent); }
+.pet-list .breed { color: var(--muted); font-size: .85rem; }
+
+.message-list li {
+    padding: .6rem .9rem;
+    background: #f9fafb;
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+}
+.message-list .time { display: block; font-size: .75rem; color: var(--muted); }
+
+.hint { color: var(--muted); font-size: .85rem; }

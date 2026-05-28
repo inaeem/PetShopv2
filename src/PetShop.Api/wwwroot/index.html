@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pet Shop — Portal</title>
+    <link rel="stylesheet" href="css/site.css" />
+</head>
+<body>
+    <header class="topbar">
+        <h1>🐾 Pet Shop Portal</h1>
+        <div id="authStatus" class="auth-status">Not signed in</div>
+    </header>
+
+    <main>
+        <!-- Sign in -->
+        <section class="card" id="loginCard">
+            <h2>Sign in</h2>
+            <form id="loginForm">
+                <label>Username <input id="username" value="admin" autocomplete="username" /></label>
+                <label>Password <input id="password" type="password" value="Admin#12345" autocomplete="current-password" /></label>
+                <button type="submit">Sign in</button>
+            </form>
+            <p class="hint">Default admin is seeded on first run (see appsettings.json).</p>
+        </section>
+
+        <!-- Pets -->
+        <section class="card">
+            <h2>Available pets</h2>
+            <div class="search-row">
+                <input id="searchTerm" placeholder="Search by name or breed…" />
+                <button id="searchBtn">Search</button>
+                <button id="refreshBtn" class="secondary">Show all</button>
+            </div>
+            <ul id="petList" class="pet-list"></ul>
+        </section>
+
+        <!-- Messaging board (static, client-side) -->
+        <section class="card">
+            <h2>Message board</h2>
+            <p class="hint">A lightweight static messaging area. Notes are stored in your browser.</p>
+            <form id="messageForm">
+                <input id="messageInput" placeholder="Leave a message about a pet…" />
+                <button type="submit">Post</button>
+            </form>
+            <ul id="messageList" class="message-list"></ul>
+        </section>
+    </main>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

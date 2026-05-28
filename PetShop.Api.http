@@ -1,0 +1,64 @@
+@host = https://localhost:7185
+
+### Login (returns a JWT)
+# @name login
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "Admin#12345"
+}
+
+### Capture the token from the login response
+@token = {{login.response.body.data.accessToken}}
+
+### Register a new user
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "jane",
+  "email": "jane@example.com",
+  "password": "Passw0rd!"
+}
+
+### List pets (anonymous)
+GET {{host}}/api/pets?page=1&pageSize=20
+
+### Search pets via stored procedure (anonymous)
+GET {{host}}/api/pets/search?term=lab
+
+### Get one pet
+GET {{host}}/api/pets/1
+
+### Create a pet (requires auth)
+POST {{host}}/api/pets
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Milo",
+  "breed": "Beagle",
+  "price": 420.00,
+  "ageMonths": 6,
+  "categoryId": 1
+}
+
+### Update a pet (requires auth)
+PUT {{host}}/api/pets/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Rex",
+  "breed": "German Shepherd",
+  "price": 700.00,
+  "ageMonths": 9,
+  "status": 0,
+  "categoryId": 1
+}
+
+### Delete a pet (requires Admin role)
+DELETE {{host}}/api/pets/1
+Authorization: Bearer {{token}}
