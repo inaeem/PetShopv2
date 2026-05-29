@@ -1,5 +1,5 @@
--- Optional reference data. Users are seeded by the API at startup (DbInitializer)
--- so their passwords are hashed with the same PBKDF2 routine the AuthService uses.
+-- Optional reference data (Categories + sample Pets). The API does not store users:
+-- clients authenticate with an externally-issued JWT, so there is nothing to seed there.
 
 INSERT INTO dbo.Categories (Name, Description) VALUES
     ('Dogs',  'Loyal canine companions'),

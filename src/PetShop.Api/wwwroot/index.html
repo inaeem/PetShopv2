@@ -9,19 +9,20 @@
 <body>
     <header class="topbar">
         <h1>🐾 Pet Shop Portal</h1>
-        <div id="authStatus" class="auth-status">Not signed in</div>
+        <div id="authStatus" class="auth-status">No token</div>
     </header>
 
     <main>
-        <!-- Sign in -->
-        <section class="card" id="loginCard">
-            <h2>Sign in</h2>
-            <form id="loginForm">
-                <label>Username <input id="username" value="admin" autocomplete="username" /></label>
-                <label>Password <input id="password" type="password" value="Admin#12345" autocomplete="current-password" /></label>
-                <button type="submit">Sign in</button>
+        <!-- Provide a token -->
+        <section class="card" id="authCard">
+            <h2>Authentication</h2>
+            <p class="hint">The API requires a bearer token on every request. Paste a JWT
+                obtained from your token issuer (signed with the shared key).</p>
+            <form id="tokenForm">
+                <label>JWT <input id="tokenInput" placeholder="eyJhbGciOi…" autocomplete="off" /></label>
+                <button type="submit">Use token</button>
+                <button type="button" id="clearTokenBtn" class="secondary">Clear</button>
             </form>
-            <p class="hint">Default admin is seeded on first run (see appsettings.json).</p>
         </section>
 
         <!-- Pets -->

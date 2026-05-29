@@ -1,9 +1,13 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Tokens;
 using PetShop.Data.Context;
 using Xunit;
 
@@ -34,6 +38,28 @@ public class PetShopApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     private string TestConnectionString =>
         new SqlConnectionStringBuilder(BaseConnection) { InitialCatalog = _databaseName }.ConnectionString;
 
+    // The API validates incoming JWTs with this shared symmetric key (it no longer
+    // issues them). Tests mint tokens signed with the same key via CreateToken.
+    private const string JwtKey = "test-signing-key-that-is-at-least-32-characters-long!";
+    private const string JwtIssuer = "PetShop.Api";
+    private const string JwtAudience = "PetShop.Clients";
+
+    /// <summary>Creates a bearer token signed with the shared key, carrying the given roles.</summary>
+    public string CreateToken(params string[] roles)
+    {
+        var creds = new SigningCredentials(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(JwtKey)), SecurityAlgorithms.HmacSha256);
+
+        var claims = new List<Claim> { new(ClaimTypes.Name, "e2e-test-user") };
+        claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
+
+        var token = new JwtSecurityToken(
+            issuer: JwtIssuer, audience: JwtAudience, claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(30), signingCredentials: creds);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
     public Task InitializeAsync() => Task.CompletedTask; // the DB is created by the app's startup migration
 
     async Task IAsyncLifetime.DisposeAsync()
@@ -56,8 +82,9 @@ public class PetShopApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             {
                 ["ConnectionStrings:PetShopDb"] = TestConnectionString,
                 ["Database:ApplyMigrationsOnStartup"] = "true",
-                ["Database:SeedAdmin"] = "true",
-                ["Database:AdminPassword"] = "Admin#12345",
+                ["Jwt:Key"] = JwtKey,
+                ["Jwt:Issuer"] = JwtIssuer,
+                ["Jwt:Audience"] = JwtAudience,
                 ["Diagnostics:LayerTracing:Enabled"] = "false"
             });
         });

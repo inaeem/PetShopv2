@@ -4,10 +4,8 @@ let token = sessionStorage.getItem("petshop_token") || null;
 
 const $ = (id) => document.getElementById(id);
 
-function setAuth(username, roles) {
-    $("authStatus").textContent = username
-        ? `Signed in as ${username} (${roles.join(", ")})`
-        : "Not signed in";
+function setAuth(active) {
+    $("authStatus").textContent = active ? "Token set" : "No token";
 }
 
 async function api(path, options = {}) {
@@ -20,19 +18,22 @@ async function api(path, options = {}) {
 }
 
 // ---- Auth ----
-$("loginForm").addEventListener("submit", async (e) => {
+// The API no longer issues tokens — the user pastes an externally-obtained JWT.
+$("tokenForm").addEventListener("submit", (e) => {
     e.preventDefault();
-    try {
-        const body = await api("/api/auth/login", {
-            method: "POST",
-            body: JSON.stringify({ username: $("username").value, password: $("password").value })
-        });
-        token = body.data.accessToken;
-        sessionStorage.setItem("petshop_token", token);
-        setAuth(body.data.username, body.data.roles);
-    } catch (err) {
-        alert(err.message);
-    }
+    token = $("tokenInput").value.trim() || null;
+    if (token) sessionStorage.setItem("petshop_token", token);
+    else sessionStorage.removeItem("petshop_token");
+    setAuth(!!token);
+    loadPets();
+});
+
+$("clearTokenBtn").addEventListener("click", () => {
+    token = null;
+    sessionStorage.removeItem("petshop_token");
+    $("tokenInput").value = "";
+    setAuth(false);
+    $("petList").innerHTML = "<li>Provide a token to view pets.</li>";
 });
 
 // ---- Pets ----
@@ -84,5 +85,8 @@ $("messageForm").addEventListener("submit", (e) => {
 });
 
 // ---- Init ----
-loadPets();
+if (token) $("tokenInput").value = token;
+setAuth(!!token);
+if (token) loadPets();
+else $("petList").innerHTML = "<li>Provide a token to view pets.</li>";
 loadMessages();

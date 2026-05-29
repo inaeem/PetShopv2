@@ -32,46 +32,6 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
             b.ToTable("Categories");
         });
 
-        modelBuilder.Entity("PetShop.Domain.Entities.Customer", b =>
-        {
-            b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("int");
-            SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-            b.Property<DateTime>("CreatedUtc").ValueGeneratedOnAdd().HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()");
-            b.Property<string>("Email").IsRequired().HasMaxLength(256).HasColumnType("nvarchar(256)");
-            b.Property<string>("FullName").IsRequired().HasMaxLength(150).HasColumnType("nvarchar(150)");
-            b.Property<string>("Phone").HasMaxLength(30).HasColumnType("nvarchar(30)");
-            b.HasKey("Id");
-            b.HasIndex("Email").IsUnique();
-            b.ToTable("Customers");
-        });
-
-        modelBuilder.Entity("PetShop.Domain.Entities.Order", b =>
-        {
-            b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("int");
-            SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-            b.Property<int>("CustomerId").HasColumnType("int");
-            b.Property<DateTime>("OrderedUtc").ValueGeneratedOnAdd().HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()");
-            b.Property<int>("Status").HasColumnType("int");
-            b.Property<decimal>("TotalAmount").HasColumnType("decimal(18,2)");
-            b.HasKey("Id");
-            b.HasIndex("CustomerId");
-            b.ToTable("Orders");
-        });
-
-        modelBuilder.Entity("PetShop.Domain.Entities.OrderItem", b =>
-        {
-            b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("int");
-            SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-            b.Property<int>("OrderId").HasColumnType("int");
-            b.Property<int>("PetId").HasColumnType("int");
-            b.Property<int>("Quantity").HasColumnType("int");
-            b.Property<decimal>("UnitPrice").HasColumnType("decimal(18,2)");
-            b.HasKey("Id");
-            b.HasIndex("OrderId");
-            b.HasIndex("PetId");
-            b.ToTable("OrderItems");
-        });
-
         modelBuilder.Entity("PetShop.Domain.Entities.Pet", b =>
         {
             b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("int");
@@ -90,21 +50,6 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
             b.ToTable("Pets");
         });
 
-        modelBuilder.Entity("PetShop.Domain.Entities.User", b =>
-        {
-            b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("int");
-            SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-            b.Property<DateTime>("CreatedUtc").ValueGeneratedOnAdd().HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()");
-            b.Property<string>("Email").IsRequired().HasMaxLength(256).HasColumnType("nvarchar(256)");
-            b.Property<bool>("IsActive").ValueGeneratedOnAdd().HasColumnType("bit").HasDefaultValue(true);
-            b.Property<string>("PasswordHash").IsRequired().HasMaxLength(512).HasColumnType("nvarchar(512)");
-            b.Property<string>("Roles").IsRequired().HasMaxLength(256).HasColumnType("nvarchar(256)");
-            b.Property<string>("Username").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
-            b.HasKey("Id");
-            b.HasIndex("Username").IsUnique();
-            b.ToTable("Users");
-        });
-
         modelBuilder.Entity("PetShop.Data.StoredProcedures.PetSearchResult", b =>
         {
             b.Property<int>("Id").HasColumnType("int");
@@ -117,26 +62,6 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
             b.ToTable((string)null);
         });
 
-        modelBuilder.Entity("PetShop.Domain.Entities.Order", b =>
-        {
-            b.HasOne("PetShop.Domain.Entities.Customer", "Customer")
-                .WithMany("Orders").HasForeignKey("CustomerId")
-                .OnDelete(DeleteBehavior.Restrict).IsRequired();
-            b.Navigation("Customer");
-        });
-
-        modelBuilder.Entity("PetShop.Domain.Entities.OrderItem", b =>
-        {
-            b.HasOne("PetShop.Domain.Entities.Order", "Order")
-                .WithMany("Items").HasForeignKey("OrderId")
-                .OnDelete(DeleteBehavior.Cascade).IsRequired();
-            b.HasOne("PetShop.Domain.Entities.Pet", "Pet")
-                .WithMany("OrderItems").HasForeignKey("PetId")
-                .OnDelete(DeleteBehavior.Restrict).IsRequired();
-            b.Navigation("Order");
-            b.Navigation("Pet");
-        });
-
         modelBuilder.Entity("PetShop.Domain.Entities.Pet", b =>
         {
             b.HasOne("PetShop.Domain.Entities.Category", "Category")
@@ -146,8 +71,5 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
         });
 
         modelBuilder.Entity("PetShop.Domain.Entities.Category", b => b.Navigation("Pets"));
-        modelBuilder.Entity("PetShop.Domain.Entities.Customer", b => b.Navigation("Orders"));
-        modelBuilder.Entity("PetShop.Domain.Entities.Order", b => b.Navigation("Items"));
-        modelBuilder.Entity("PetShop.Domain.Entities.Pet", b => b.Navigation("OrderItems"));
     }
 }

@@ -1,38 +1,22 @@
 @host = https://localhost:7185
 
-### Login (returns a JWT)
-# @name login
-POST {{host}}/api/auth/login
-Content-Type: application/json
+### The API does not issue tokens — paste an externally-obtained JWT here.
+### It must be signed with the shared Jwt:Key and carry the expected issuer/audience.
+@token = PASTE_A_VALID_JWT_HERE
 
-{
-  "username": "admin",
-  "password": "Admin#12345"
-}
-
-### Capture the token from the login response
-@token = {{login.response.body.data.accessToken}}
-
-### Register a new user
-POST {{host}}/api/auth/register
-Content-Type: application/json
-
-{
-  "username": "jane",
-  "email": "jane@example.com",
-  "password": "Passw0rd!"
-}
-
-### List pets (anonymous)
+### List pets (requires a token)
 GET {{host}}/api/pets?page=1&pageSize=20
+Authorization: Bearer {{token}}
 
-### Search pets via stored procedure (anonymous)
+### Search pets via stored procedure (requires a token)
 GET {{host}}/api/pets/search?term=lab
+Authorization: Bearer {{token}}
 
 ### Get one pet
 GET {{host}}/api/pets/1
+Authorization: Bearer {{token}}
 
-### Create a pet (requires auth)
+### Create a pet
 POST {{host}}/api/pets
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -45,7 +29,7 @@ Content-Type: application/json
   "categoryId": 1
 }
 
-### Update a pet (requires auth)
+### Update a pet
 PUT {{host}}/api/pets/1
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -59,6 +43,6 @@ Content-Type: application/json
   "categoryId": 1
 }
 
-### Delete a pet (requires Admin role)
+### Delete a pet (requires the Admin role in the token)
 DELETE {{host}}/api/pets/1
 Authorization: Bearer {{token}}

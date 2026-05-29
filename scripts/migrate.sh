@@ -9,7 +9,8 @@
 #     scripts/migrate.sh
 #
 # Existing/pre-populated database (run the baseline once, on a host that has sqlcmd):
-#   sqlcmd -S <server> -d PetShop -U <user> -P <pass> -i database/04_baseline_existing_database.sql
+#   sqlcmd -S <server> -d PetShop -U <user> -P <pass> -i database/04_baseline_existing_database.sql \
+#          -v MigrationId="20260101000000_InitialCreate" ProductVersion="8.0.6"
 #   ...then run this script.
 #
 # Migrations are recorded in __EFMigrationsHistory, so this is idempotent and never

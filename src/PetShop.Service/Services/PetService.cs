@@ -4,6 +4,7 @@ using PetShop.Data.Diagnostics;
 using PetShop.Data.UnitOfWork;
 using PetShop.Service.Common;
 using PetShop.Service.DTOs;
+using PetShop.Service.External;
 using PetShop.Service.Mapping;
 
 namespace PetShop.Service.Services;
@@ -15,12 +16,14 @@ public class PetService : IPetService
     private readonly IUnitOfWork _uow;
     private readonly ILogger<PetService> _logger;
     private readonly ILayerTracer _tracer;
+    private readonly IPetSyncClient _petSync;
 
-    public PetService(IUnitOfWork uow, ILogger<PetService> logger, ILayerTracer tracer)
+    public PetService(IUnitOfWork uow, ILogger<PetService> logger, ILayerTracer tracer, IPetSyncClient petSync)
     {
         _uow = uow;
         _logger = logger;
         _tracer = tracer;
+        _petSync = petSync;
     }
 
     private Task<T> Measure<T>(string member, object? args, Func<Task<T>> body)
@@ -82,6 +85,16 @@ public class PetService : IPetService
             await _uow.SaveChangesAsync(ct);
 
             _logger.LogInformation("Created pet {PetId} ({PetName})", pet.Id, pet.Name);
+
+            // Step 2 of the create flow: replicate to the external pet service.
+            // Best-effort — the pet is already persisted locally, so a remote
+            // failure is logged but does NOT fail the create (the client never
+            // throws for transport/HTTP errors).
+            var sync = await _petSync.CreateAsync(pet, ct);
+            if (!sync.Success && !sync.Skipped)
+                _logger.LogWarning(
+                    "Pet {PetId} created locally but remote sync failed: {Error}", pet.Id, sync.Error);
+
             pet.Category = category;
             return pet.ToDto();
         });

@@ -28,7 +28,7 @@ public class PetEndpointsTests
     public async Task CreatePet_ThenList_ReturnsCreatedPet()
     {
         var categoryId = await EnsureCategoryAsync("Dogs");
-        await AuthenticateAsync();
+        Authenticate();
 
         var create = await _client.PostAsJsonAsync("/api/pets",
             new { name = "Rex", breed = "German Shepherd", price = 650m, ageMonths = 8, categoryId });
@@ -44,7 +44,7 @@ public class PetEndpointsTests
     [Fact]
     public async Task CreatePet_WithInvalidPayload_Returns400WithErrors()
     {
-        await AuthenticateAsync();
+        Authenticate();
 
         // Empty name + negative price + missing category → fails FluentValidation.
         var resp = await _client.PostAsJsonAsync("/api/pets",
@@ -60,7 +60,7 @@ public class PetEndpointsTests
     public async Task SearchPets_UsesStoredProcedure_ReturnsOk()
     {
         var categoryId = await EnsureCategoryAsync("Cats");
-        await AuthenticateAsync();
+        Authenticate();
         await _client.PostAsJsonAsync("/api/pets",
             new { name = "Whiskers", breed = "Siamese", price = 300m, categoryId });
 
@@ -75,14 +75,11 @@ public class PetEndpointsTests
 
     // --- helpers ---
 
-    private async Task AuthenticateAsync()
-    {
-        var resp = await _client.PostAsJsonAsync("/api/auth/login",
-            new { username = "admin", password = "Admin#12345" });
-        resp.EnsureSuccessStatusCode();
-        var env = await resp.Content.ReadFromJsonAsync<ApiEnvelope<AuthData>>(Json);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", env!.Data!.AccessToken);
-    }
+    // Tokens are minted locally (signed with the shared key) — the API no longer
+    // issues them. Admin role lets these tests hit role-restricted endpoints too.
+    private void Authenticate()
+        => _client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", _factory.CreateToken("Admin"));
 
     private async Task<int> EnsureCategoryAsync(string name)
     {

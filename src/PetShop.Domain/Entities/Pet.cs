@@ -17,6 +17,4 @@ public class Pet
 
     public DateTime CreatedUtc { get; set; }
     public DateTime? UpdatedUtc { get; set; }
-
-    public ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
 }

@@ -18,7 +18,6 @@ public class PetsController : ControllerBase
 
     /// <summary>Returns a paged list of pets.</summary>
     [HttpGet]
-    [AllowAnonymous]
     public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
         var result = await _pets.GetPagedAsync(page, pageSize, ct);
@@ -27,7 +26,6 @@ public class PetsController : ControllerBase
 
     /// <summary>Searches pets via the dbo.usp_SearchPets stored procedure.</summary>
     [HttpGet("search")]
-    [AllowAnonymous]
     public async Task<IActionResult> Search([FromQuery] string? term, [FromQuery] int? categoryId, CancellationToken ct = default)
     {
         var result = await _pets.SearchAsync(term, categoryId, ct);
@@ -36,7 +34,6 @@ public class PetsController : ControllerBase
 
     /// <summary>Returns a single pet by id.</summary>
     [HttpGet("{id:int}")]
-    [AllowAnonymous]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {
         var pet = await _pets.GetByIdAsync(id, ct);

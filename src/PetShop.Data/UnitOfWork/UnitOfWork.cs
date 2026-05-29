@@ -13,21 +13,15 @@ public class UnitOfWork : IUnitOfWork
     public UnitOfWork(
         PetShopDbContext db,
         IPetRepository pets,
-        IUserRepository users,
-        IRepository<Category> categories,
-        IRepository<Order> orders)
+        IRepository<Category> categories)
     {
         _db = db;
         Pets = pets;
-        Users = users;
         Categories = categories;
-        Orders = orders;
     }
 
     public IPetRepository Pets { get; }
-    public IUserRepository Users { get; }
     public IRepository<Category> Categories { get; }
-    public IRepository<Order> Orders { get; }
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
 }

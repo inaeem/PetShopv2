@@ -9,9 +9,7 @@ namespace PetShop.Data.UnitOfWork;
 public interface IUnitOfWork
 {
     IPetRepository Pets { get; }
-    IUserRepository Users { get; }
     IRepository<Category> Categories { get; }
-    IRepository<Order> Orders { get; }
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

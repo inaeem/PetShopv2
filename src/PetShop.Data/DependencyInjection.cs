@@ -27,9 +27,7 @@ public static class DependencyInjection
         services.AddSingleton<ILayerTracer, LayerTracer>();
 
         services.AddScoped<IPetRepository, PetRepository>();
-        services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRepository<Category>, Repository<Category>>();
-        services.AddScoped<IRepository<Order>, Repository<Order>>();
         services.AddScoped<IUnitOfWork, global::PetShop.Data.UnitOfWork.UnitOfWork>();
 
         return services;

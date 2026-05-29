@@ -16,10 +16,6 @@ public class PetShopDbContext : DbContext
 
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Pet> Pets => Set<Pet>();
-    public DbSet<Customer> Customers => Set<Customer>();
-    public DbSet<Order> Orders => Set<Order>();
-    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
-    public DbSet<User> Users => Set<User>();
 
     /// <summary>Keyless result set returned by the dbo.usp_SearchPets stored procedure.</summary>
     public DbSet<PetSearchResult> PetSearchResults => Set<PetSearchResult>();

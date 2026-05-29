@@ -1,13 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using PetShop.Data.Context;
-using PetShop.Domain.Entities;
-using PetShop.Service.Security;
 
 namespace PetShop.Api.Data;
 
 /// <summary>
-/// Applies pending migrations and seeds a default admin user on startup.
-/// Toggle via the "Database:ApplyMigrationsOnStartup" / "Database:SeedAdmin" settings.
+/// Applies pending migrations on startup. Toggle via the
+/// "Database:ApplyMigrationsOnStartup" setting. The API no longer issues tokens or
+/// stores users, so there is no user seeding — clients authenticate with an
+/// externally-issued JWT.
 /// </summary>
 public static class DbInitializer
 {
@@ -22,21 +22,6 @@ public static class DbInitializer
         {
             logger.LogInformation("Applying pending migrations...");
             await db.Database.MigrateAsync();
-        }
-
-        if (config.GetValue("Database:SeedAdmin", true) && !await db.Users.AnyAsync())
-        {
-            var hasher = sp.GetRequiredService<IPasswordHasher>();
-            db.Users.Add(new User
-            {
-                Username = "admin",
-                Email = "admin@petshop.local",
-                PasswordHash = hasher.Hash(config["Database:AdminPassword"] ?? "Admin#12345"),
-                Roles = "Admin,User",
-                IsActive = true
-            });
-            await db.SaveChangesAsync();
-            logger.LogInformation("Seeded default admin user.");
         }
     }
 }

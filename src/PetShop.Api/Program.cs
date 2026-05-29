@@ -126,7 +126,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Enter the JWT token returned by /api/auth/login.",
+        Description = "Paste an externally-obtained JWT (signed with the shared Jwt:Key).",
         Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
     };
     c.AddSecurityDefinition("Bearer", scheme);
