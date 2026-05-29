@@ -1,0 +1,15 @@
+<Project>
+
+  <!--
+    Common MSBuild properties shared by every project in the repo (auto-imported
+    by the SDK, before each .csproj). Project-specific settings stay in the
+    individual .csproj files — e.g. the API's GenerateDocumentationFile, or the
+    test project's IsTestProject. NuGet versions live in Directory.Packages.props.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

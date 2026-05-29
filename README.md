@@ -193,6 +193,53 @@ export Jwt__Key="a-long-random-secret-of-at-least-32-characters"
 
 In dev use user-secrets: `dotnet user-secrets set "Jwt:Key" "<dev-secret>" --project src/PetShop.Api`.
 
+### Layering principle — define once, override the delta
+
+`appsettings.json` is the **single base** that holds every section with safe defaults
+(`Jwt`, `PetSync`, `Database`, `Diagnostics`, the full `Serilog` sink setup, …). Each
+`appsettings.{Environment}.json` then overrides **only what differs** for that
+environment — never a full copy. So:
+
+- A new setting (e.g. another `PetSync` field) goes in **base only**; every
+  environment inherits it automatically.
+- An environment file should contain just its deltas (connection string, log level,
+  tracing toggle, `ApplyMigrationsOnStartup`). If a value matches base, leave it out.
+- Secrets are never in any JSON file — they come from env vars / user-secrets (above),
+  which sit *above* the env file in the layer order and win.
+
+### Connection-string pattern
+
+One key, `ConnectionStrings:PetShopDb`, redefined per environment — the server and
+auth differ, so this is an intentional override, not duplication:
+
+| Env | Server / auth | Encryption |
+|-----|---------------|------------|
+| Base / Development | `localhost` / `(localdb)\MSSQLLocalDB`, Trusted (Windows) auth | `TrustServerCertificate=True` (local dev) |
+| QA | host + SQL login; password is `__SET_VIA_ENV_OR_SECRET__` | `TrustServerCertificate=True` |
+| Production | host + SQL login; password is `__SET_VIA_ENV_OR_SECRET__` | `Encrypt=True;TrustServerCertificate=False` (validate the cert) |
+
+The `__SET_VIA_ENV_OR_SECRET__` placeholders are replaced at runtime by
+`ConnectionStrings__PetShopDb` (whole string) or just the password via your secret
+store — the JSON only documents the shape.
+
+### Serilog pattern
+
+The **sinks are configured once in base** (`Serilog:WriteTo` → Console + rolling File
+at `logs/petshop-*.log`, 7-day retention, `CorrelationId`/`SourceContext` in the
+template, `Enrich:FromLogContext`). Environment files override **only `MinimumLevel`**:
+
+| Env | Default level | `Microsoft.AspNetCore` | EF `Database.Command` |
+|-----|---------------|------------------------|-----------------------|
+| Base | Information | Warning | Warning |
+| Development | Debug | Information | (inherits Warning) |
+| QA | Debug | Information | Information |
+| Production | Information | Warning | Warning |
+
+To see the SQL EF emits, lower `Serilog:MinimumLevel:Override:Microsoft.EntityFrameworkCore.Database.Command`
+to `Information` (already the case in QA). Serilog reads this config in `Program.cs`
+via `ReadFrom.Configuration(...)`, so no redeploy is needed to change levels — just
+the env file or an env-var override.
+
 ---
 
 ## Authentication
