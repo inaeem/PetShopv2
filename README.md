@@ -595,6 +595,19 @@ large, **reverse-engineer it from your existing database** instead of hand-writi
 the goal is: get a model that matches it → produce a baseline `InitialCreate` → tell EF
 the baseline is **already applied** (so it never re-creates your populated tables).
 
+> **Prerequisite — the `*.Api` startup project must reference `Microsoft.EntityFrameworkCore.Design`.**
+> Every `dotnet ef` command below (scaffold, `migrations add`, `database update`) inspects the
+> `--startup-project` for this package. `*.Data` references it with `PrivateAssets=all`, which
+> intentionally stops it flowing to dependents, so the Api needs its own reference or you'll get
+> *"startup project … doesn't reference Microsoft.EntityFrameworkCore.Design."* Add to `src/$New.Api/$New.Api.csproj`:
+>
+> ```xml
+> <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+>   <PrivateAssets>all</PrivateAssets>
+>   <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+> </PackageReference>
+> ```
+
 ```powershell
 $conn = 'Server=<srv>;Database=<YourDb>;Trusted_Connection=True;TrustServerCertificate=True'
 
@@ -645,6 +658,7 @@ dotnet test                        # after updating the e2e tests for your route
 - [ ] All five projects renamed (folders, `.csproj`, `.sln`, namespaces); `Select-String PetShop` returns nothing
 - [ ] Connection-string key, DB name, log path, artifact name, env vars updated to your project
 - [ ] Domain models replaced (or scaffolded from the DB); unused stored-proc code removed
+- [ ] `*.Api` startup project references `Microsoft.EntityFrameworkCore.Design` (needed by every `dotnet ef` command)
 - [ ] Migrations reset; fresh `InitialCreate` generated and **baselined** against the existing DB
 - [ ] New `Jwt:Key` (matching your token issuer); no sample secrets committed
 - [ ] `dotnet build` + `dotnet test` green; `scripts/build.sh` produces `swagger.json`
