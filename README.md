@@ -611,15 +611,29 @@ the baseline is **already applied** (so it never re-creates your populated table
 ```powershell
 $conn = 'Server=<srv>;Database=<YourDb>;Trusted_Connection=True;TrustServerCertificate=True'
 
-# 5a. (optional) reverse-engineer entities from the live DB if you didn't hand-write them
-dotnet ef dbcontext scaffold "$conn" Microsoft.EntityFrameworkCore.SqlServer `
-  --project src/$New.Data --startup-project src/$New.Api --output-dir Models --force
+# Point EVERY command at the legacy DB. Scaffold (5a) takes the connection string as an
+# argument, but `migrations add` / `database update` read it from the Api's configuration
+# (AddDataLayer → ConnectionStrings:PetShopDb). Export it so they don't silently fall back
+# to the LocalDB string in appsettings.Development.json.
+$env:ConnectionStrings__PetShopDb = $conn
+$env:ASPNETCORE_ENVIRONMENT       = 'Development'
 
-# 5b. remove PetShop's migrations, then generate a baseline for YOUR model
+# 5a. (optional) reverse-engineer entities from the live DB if you didn't hand-write them.
+#     --no-onconfiguring keeps the connection string OUT of the generated code (no hard-coded
+#     secret) and preserves the DbContextOptions constructor that AddDbContext needs.
+dotnet ef dbcontext scaffold "$conn" Microsoft.EntityFrameworkCore.SqlServer `
+  --project src/$New.Data --startup-project src/$New.Api --output-dir Models --force --no-onconfiguring
+
+# 5b. CONSOLIDATE to a SINGLE DbContext. Scaffold emits its own context (named after the DB);
+#     the template already ships one. Keep exactly one — delete the other and make sure
+#     DependencyInjection.cs registers it. Two contexts → "More than one DbContext was found.
+#     Specify --context" on the next command.
+
+# 5c. remove PetShop's migrations AND its snapshot, then generate a baseline for YOUR model
 Remove-Item src/$New.Data/Migrations/*.cs -Force
 dotnet ef migrations add InitialCreate --project src/$New.Data --startup-project src/$New.Api
 
-# 5c. baseline the EXISTING database: record InitialCreate as applied WITHOUT running its Up()
+# 5d. baseline the EXISTING database: record InitialCreate as applied WITHOUT running its Up()
 $mig = (Get-ChildItem "src/$New.Data/Migrations/*_InitialCreate.cs").BaseName
 sqlcmd -S <srv> -d <YourDb> -i database/04_baseline_existing_database.sql `
        -v MigrationId="$mig" ProductVersion="8.0.6"
@@ -630,15 +644,60 @@ sqlcmd -S <srv> -d <YourDb> -i database/04_baseline_existing_database.sql `
 > applied, taking the migration id and EF version as `sqlcmd` `-v` variables so
 > there is nothing project-specific to edit.
 
-After this, EF sees `InitialCreate` as applied. **Future** schema changes are normal:
+#### Guard the legacy database against accidental create/drop
+
+The generated `InitialCreate.Up()` is full of `CREATE TABLE` and its `Down()` is full of
+`DROP TABLE`. Against a populated legacy DB that's a footgun, so harden it — defence in depth:
+
+**1. Make the baseline migration inert.** Empty its `Up()` and make `Down()` refuse, so even an
+accidental `database update` / rollback can't touch the legacy tables:
+
+```csharp
+public partial class InitialCreate : Migration
+{
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        // Baseline of a pre-existing legacy database — the schema already exists,
+        // so this intentionally does NOTHING. (For dev/test DBs that build from
+        // migrations, guard each table with IF OBJECT_ID(...) IS NULL instead of emptying.)
+    }
+
+    protected override void Down(MigrationBuilder migrationBuilder) =>
+        throw new NotSupportedException(
+            "InitialCreate is a baseline of an existing database and cannot be rolled back.");
+}
+```
+
+> ⚠️ **Leave `…ModelSnapshot.cs` untouched** — it must keep describing the *full* legacy schema.
+> EF diffs your entities against the snapshot (not against `Up()`) to build the next migration,
+> so a full snapshot + empty `Up()` is exactly what you want. If you blank the snapshot too, your
+> next `migrations add` will emit `CREATE TABLE` for the entire schema — the disaster you just avoided.
+
+**2. Never auto-migrate or `database update` shared environments.** Keep
+`Database:ApplyMigrationsOnStartup = false` (QA/Prod default) and deploy schema changes as a
+**reviewed, idempotent script** — already-applied migrations (your baselined `InitialCreate`) are
+skipped, and a human reads the SQL first:
+
+```powershell
+dotnet ef migrations script --idempotent --output migrate.sql `
+  --project src/$New.Data --startup-project src/$New.Api
+```
+
+**3. Take away the permission.** Give the app's runtime SQL login `db_datareader` +
+`db_datawriter` + EXECUTE only — **no DDL**. Run migrations with a separate deploy-time login that
+has DDL rights, used only in a gated pipeline. Then the database itself refuses an accidental
+`CREATE`/`DROP`, whatever the code says.
+
+After this, EF sees `InitialCreate` as applied. **Future** schema changes are normal — and a
+genuine `DropTable` only ever appears in a migration *you* author for a change *you* are making:
 
 ```powershell
 dotnet ef migrations add <ChangeName> --project src/$New.Data --startup-project src/$New.Api
 dotnet ef database update         --project src/$New.Data --startup-project src/$New.Api
 ```
 
-> A brand-new/empty DB instead of an existing one? Skip 5a and 5c and just run
-> `dotnet ef database update` — see [Database & migrations](#database--migrations).
+> A brand-new/empty DB instead of an existing one? Skip 5a/5d and the inert-baseline guard, and
+> just run `dotnet ef database update` — see [Database & migrations](#database--migrations).
 > Always review a generated migration before applying it to a DB with real rows.
 
 **6. Rotate secrets.** Set a **new `Jwt:Key`** (≥32 chars) — it must match the key your
@@ -659,7 +718,10 @@ dotnet test                        # after updating the e2e tests for your route
 - [ ] Connection-string key, DB name, log path, artifact name, env vars updated to your project
 - [ ] Domain models replaced (or scaffolded from the DB); unused stored-proc code removed
 - [ ] `*.Api` startup project references `Microsoft.EntityFrameworkCore.Design` (needed by every `dotnet ef` command)
+- [ ] `ConnectionStrings__PetShopDb` exported so `migrations add`/`database update` hit the legacy DB, not LocalDB
+- [ ] Exactly one `DbContext` (scaffolded duplicate removed); registered in `DependencyInjection.cs`
 - [ ] Migrations reset; fresh `InitialCreate` generated and **baselined** against the existing DB
+- [ ] Legacy DB guarded: `InitialCreate.Up()` inert + `Down()` throws (snapshot left full); no auto-migrate; runtime login has no DDL
 - [ ] New `Jwt:Key` (matching your token issuer); no sample secrets committed
 - [ ] `dotnet build` + `dotnet test` green; `scripts/build.sh` produces `swagger.json`
 
