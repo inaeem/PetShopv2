@@ -34,3 +34,9 @@ public record PetSearchResultDto(
     decimal Price,
     PetStatus Status,
     string CategoryName);
+
+public record CategoryWithPetsDto(
+    int Id,
+    string Name,
+    string? Description,
+    IReadOnlyList<PetDto> Pets);

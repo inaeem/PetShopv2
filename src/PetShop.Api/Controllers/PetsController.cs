@@ -32,6 +32,14 @@ public class PetsController : ControllerBase
         return Ok(ApiResponse<IReadOnlyList<PetSearchResultDto>>.Ok(result));
     }
 
+    /// <summary>Returns the authenticated caller's available pets, grouped by category.</summary>
+    [HttpGet("mine")]
+    public async Task<IActionResult> GetMine(CancellationToken ct)
+    {
+        var result = await _pets.GetMyAvailablePetsByCategoryAsync(ct);
+        return Ok(ApiResponse<IReadOnlyList<CategoryWithPetsDto>>.Ok(result));
+    }
+
     /// <summary>Returns a single pet by id.</summary>
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)

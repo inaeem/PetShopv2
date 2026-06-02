@@ -14,6 +14,7 @@ public class PetConfiguration : IEntityTypeConfiguration<Pet>
         builder.Property(p => p.Breed).HasMaxLength(100);
         builder.Property(p => p.Price).HasColumnType("decimal(18,2)");
         builder.Property(p => p.Status).HasConversion<int>();
+        builder.Property(p => p.OwnerEmail).HasMaxLength(256);
         builder.Property(p => p.CreatedUtc).HasDefaultValueSql("SYSUTCDATETIME()");
 
         builder.HasOne(p => p.Category)
@@ -23,5 +24,6 @@ public class PetConfiguration : IEntityTypeConfiguration<Pet>
 
         builder.HasIndex(p => p.Status);
         builder.HasIndex(p => p.CategoryId);
+        builder.HasIndex(p => p.OwnerEmail);
     }
 }

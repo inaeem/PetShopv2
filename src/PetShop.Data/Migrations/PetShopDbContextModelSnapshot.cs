@@ -41,11 +41,13 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
             b.Property<int>("CategoryId").HasColumnType("int");
             b.Property<DateTime>("CreatedUtc").ValueGeneratedOnAdd().HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()");
             b.Property<string>("Name").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+            b.Property<string>("OwnerEmail").HasMaxLength(256).HasColumnType("nvarchar(256)");
             b.Property<decimal>("Price").HasColumnType("decimal(18,2)");
             b.Property<int>("Status").HasColumnType("int");
             b.Property<DateTime?>("UpdatedUtc").HasColumnType("datetime2");
             b.HasKey("Id");
             b.HasIndex("CategoryId");
+            b.HasIndex("OwnerEmail");
             b.HasIndex("Status");
             b.ToTable("Pets");
         });
