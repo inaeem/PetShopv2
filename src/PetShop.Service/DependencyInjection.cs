@@ -30,6 +30,13 @@ public static class DependencyInjection
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", petSync.ServiceToken);
         });
 
+        // Outbound email (SMTP via System.Net.Mail). Gated by Mail:Enabled — when off,
+        // sends are skipped, so non-configured environments make no SMTP calls.
+        services.Configure<MailSettings>(configuration.GetSection(MailSettings.SectionName));
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
+        // Renders email bodies/subjects from on-disk templates (one folder per template).
+        services.AddSingleton<IEmailTemplateRenderer, FileEmailTemplateRenderer>();
+
         // Register all FluentValidation validators in this assembly.
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
 
