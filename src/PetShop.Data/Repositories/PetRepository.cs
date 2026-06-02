@@ -3,6 +3,7 @@ using PetShop.Data.Context;
 using PetShop.Data.Diagnostics;
 using PetShop.Data.StoredProcedures;
 using PetShop.Domain.Entities;
+using PetShop.Domain.Enums;
 
 namespace PetShop.Data.Repositories;
 
@@ -26,4 +27,16 @@ public class PetRepository : Repository<Pet>, IPetRepository
                 .AsNoTracking()
                 .ToListAsync(ct),
             new { term, categoryId });
+
+    public Task<IReadOnlyList<Category>> GetCategoriesWithAvailablePetsForOwnerAsync(
+        string ownerEmail, CancellationToken ct = default)
+        => Measure<IReadOnlyList<Category>>(nameof(GetCategoriesWithAvailablePetsForOwnerAsync),
+            async () => await Db.Categories.AsNoTracking()
+                // Keep only categories that have a matching pet...
+                .Where(c => c.Pets.Any(p => p.Status == PetStatus.Available && p.OwnerEmail == ownerEmail))
+                // ...and within each, include ONLY those pets (filtered Include). The
+                // captured ownerEmail is parameterised by EF, so this is injection-safe.
+                .Include(c => c.Pets.Where(p => p.Status == PetStatus.Available && p.OwnerEmail == ownerEmail))
+                .ToListAsync(ct),
+            new { ownerEmail });
 }

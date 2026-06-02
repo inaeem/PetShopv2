@@ -12,6 +12,9 @@ public class Pet
     public int? AgeMonths { get; set; }
     public PetStatus Status { get; set; } = PetStatus.Available;
 
+    /// <summary>Email of the user who owns/registered this pet. Null for legacy/unowned pets.</summary>
+    public string? OwnerEmail { get; set; }
+
     public int CategoryId { get; set; }
     public Category? Category { get; set; }
 

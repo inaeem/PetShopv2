@@ -1,5 +1,5 @@
 using System.Linq;
-using System.Text;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
@@ -8,6 +8,7 @@ using PetShop.Api.Common;
 using PetShop.Api.Data;
 using PetShop.Api.Filters;
 using PetShop.Api.Middleware;
+using PetShop.Api.Security;
 using PetShop.Data;
 using PetShop.Service;
 using PetShop.Service.Common;
@@ -29,6 +30,12 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
 // ---------------------------------------------------------------------------
 builder.Services.AddDataLayer(builder.Configuration);
 builder.Services.AddServiceLayer(builder.Configuration);
+
+// Exposes the authenticated caller to the service layer via the ICurrentUser
+// abstraction, implemented here over IHttpContextAccessor (keeps the service layer
+// free of any HttpContext dependency).
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 
 // ---------------------------------------------------------------------------
 // Controllers + global filters
@@ -63,6 +70,20 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 var jwt = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
           ?? throw new InvalidOperationException("Jwt settings are not configured.");
 
+if (string.IsNullOrWhiteSpace(jwt.Modulus) || string.IsNullOrWhiteSpace(jwt.Exponent))
+    throw new InvalidOperationException("Jwt:Modulus and Jwt:Exponent must be configured.");
+
+// Build the issuer's RSA public key from the modulus/exponent supplied in config
+// (base64url-encoded, JWK "n"/"e" form). Tokens are signed with the issuer's private
+// key elsewhere; we only hold the public half to verify signatures.
+var rsa = new RSACryptoServiceProvider();
+rsa.ImportParameters(new RSAParameters
+{
+    Modulus = Base64UrlEncoder.DecodeBytes(jwt.Modulus),
+    Exponent = Base64UrlEncoder.DecodeBytes(jwt.Exponent)
+});
+var issuerSigningKey = new RsaSecurityKey(rsa);
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -74,7 +95,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwt.Issuer,
             ValidAudience = jwt.Audience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)),
+            IssuerSigningKey = issuerSigningKey,
             ClockSkew = TimeSpan.FromSeconds(30)
         };
 
@@ -126,7 +147,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Paste an externally-obtained JWT (signed with the shared Jwt:Key).",
+        Description = "Paste an externally-obtained JWT (signed with the issuer's RSA private key).",
         Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
     };
     c.AddSecurityDefinition("Bearer", scheme);

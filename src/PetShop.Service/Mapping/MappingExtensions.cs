@@ -49,4 +49,12 @@ public static class MappingExtensions
         r.Price,
         (PetStatus)r.Status,
         r.CategoryName);
+
+    public static CategoryWithPetsDto ToDto(this Category c) => new(
+        c.Id,
+        c.Name,
+        c.Description,
+        // The category name on each nested PetDto is left null — it's redundant here,
+        // since the parent already carries it (and the back-reference isn't loaded).
+        c.Pets.Select(p => p.ToDto()).ToList());
 }

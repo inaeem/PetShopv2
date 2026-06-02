@@ -1,6 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Text;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.SqlClient;
@@ -38,17 +38,18 @@ public class PetShopApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     private string TestConnectionString =>
         new SqlConnectionStringBuilder(BaseConnection) { InitialCatalog = _databaseName }.ConnectionString;
 
-    // The API validates incoming JWTs with this shared symmetric key (it no longer
-    // issues them). Tests mint tokens signed with the same key via CreateToken.
-    private const string JwtKey = "test-signing-key-that-is-at-least-32-characters-long!";
+    // The API verifies incoming JWTs with the issuer's RSA public key (it no longer
+    // issues them). Tests own a throwaway RSA keypair: they sign tokens with the private
+    // key via CreateToken, and hand the API the public modulus/exponent through config.
+    private static readonly RSA JwtRsa = RSA.Create(2048);
     private const string JwtIssuer = "PetShop.Api";
     private const string JwtAudience = "PetShop.Clients";
 
-    /// <summary>Creates a bearer token signed with the shared key, carrying the given roles.</summary>
+    /// <summary>Creates a bearer token signed with the test RSA private key, carrying the given roles.</summary>
     public string CreateToken(params string[] roles)
     {
         var creds = new SigningCredentials(
-            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(JwtKey)), SecurityAlgorithms.HmacSha256);
+            new RsaSecurityKey(JwtRsa), SecurityAlgorithms.RsaSha256);
 
         var claims = new List<Claim> { new(ClaimTypes.Name, "e2e-test-user") };
         claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
@@ -78,11 +79,13 @@ public class PetShopApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseEnvironment("Testing");
         builder.ConfigureAppConfiguration((_, config) =>
         {
+            var pub = JwtRsa.ExportParameters(includePrivateParameters: false);
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:PetShopDb"] = TestConnectionString,
                 ["Database:ApplyMigrationsOnStartup"] = "true",
-                ["Jwt:Key"] = JwtKey,
+                ["Jwt:Modulus"] = Base64UrlEncoder.Encode(pub.Modulus),
+                ["Jwt:Exponent"] = Base64UrlEncoder.Encode(pub.Exponent),
                 ["Jwt:Issuer"] = JwtIssuer,
                 ["Jwt:Audience"] = JwtAudience,
                 ["Diagnostics:LayerTracing:Enabled"] = "false"

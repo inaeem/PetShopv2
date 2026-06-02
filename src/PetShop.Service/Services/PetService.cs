@@ -6,31 +6,24 @@ using PetShop.Service.Common;
 using PetShop.Service.DTOs;
 using PetShop.Service.External;
 using PetShop.Service.Mapping;
+using PetShop.Service.Security;
 
 namespace PetShop.Service.Services;
 
-public class PetService : IPetService
+public class PetService : ServiceBase, IPetService
 {
-    private const string Category = "PetShop.Service.PetService";
-
     private readonly IUnitOfWork _uow;
     private readonly ILogger<PetService> _logger;
-    private readonly ILayerTracer _tracer;
     private readonly IPetSyncClient _petSync;
 
-    public PetService(IUnitOfWork uow, ILogger<PetService> logger, ILayerTracer tracer, IPetSyncClient petSync)
+    public PetService(IUnitOfWork uow, ILogger<PetService> logger, ILayerTracer tracer,
+        IPetSyncClient petSync, ICurrentUser currentUser)
+        : base(currentUser, tracer)
     {
         _uow = uow;
         _logger = logger;
-        _tracer = tracer;
         _petSync = petSync;
     }
-
-    private Task<T> Measure<T>(string member, object? args, Func<Task<T>> body)
-        => _tracer.MeasureAsync(LayerKind.Service, Category, member, body, args);
-
-    private Task Measure(string member, object? args, Func<Task> body)
-        => _tracer.MeasureAsync(LayerKind.Service, Category, member, body, args);
 
     public Task<PagedResult<PetDto>> GetPagedAsync(int page, int pageSize, CancellationToken ct = default)
         => Measure(nameof(GetPagedAsync), new { page, pageSize }, async () =>
@@ -74,6 +67,17 @@ public class PetService : IPetService
             return results.Select(r => r.ToDto()).ToList();
         });
 
+    public Task<IReadOnlyList<CategoryWithPetsDto>> GetMyAvailablePetsByCategoryAsync(CancellationToken ct = default)
+        => Measure<IReadOnlyList<CategoryWithPetsDto>>(nameof(GetMyAvailablePetsByCategoryAsync), null, async () =>
+        {
+            // The caller comes from the validated token, never from client input.
+            var email = CurrentUser.Email
+                ?? throw AppException.Unauthorized("The current user has no email claim.");
+
+            var categories = await _uow.Pets.GetCategoriesWithAvailablePetsForOwnerAsync(email, ct);
+            return categories.Select(c => c.ToDto()).ToList();
+        });
+
     public Task<PetDto> CreateAsync(CreatePetRequest request, CancellationToken ct = default)
         => Measure(nameof(CreateAsync), new { request.Name, request.CategoryId }, async () =>
         {
@@ -81,6 +85,7 @@ public class PetService : IPetService
                 ?? throw AppException.NotFound("Category");
 
             var pet = request.ToEntity();
+            pet.OwnerEmail = CurrentUser.Email;   // stamp the creator as owner (null if no email claim)
             await _uow.Pets.AddAsync(pet, ct);
             await _uow.SaveChangesAsync(ct);
 
