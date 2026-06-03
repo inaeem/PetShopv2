@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -41,7 +42,10 @@ public class PetSyncClient : IPetSyncClient
         {
             try
             {
-                using var response = await _http.PostAsJsonAsync(_settings.CreatePetPath, payload, ct);
+                using var content = JsonContent.Create(payload);
+                if (!string.IsNullOrWhiteSpace(_settings.ContentType))
+                    content.Headers.ContentType = MediaTypeHeaderValue.Parse(_settings.ContentType);
+                using var response = await _http.PostAsync(_settings.CreatePetPath, content, ct);
 
                 if (response.IsSuccessStatusCode)
                 {

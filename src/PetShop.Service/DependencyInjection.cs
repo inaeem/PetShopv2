@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Security.Cryptography.X509Certificates;
 using FluentValidation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,6 +29,28 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(petSync.TimeoutSeconds <= 0 ? 10 : petSync.TimeoutSeconds);
             if (!string.IsNullOrWhiteSpace(petSync.ServiceToken))
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", petSync.ServiceToken);
+
+            // Advertise what we accept back from the remote service.
+            if (!string.IsNullOrWhiteSpace(petSync.Accept))
+                client.DefaultRequestHeaders.Accept.ParseAdd(petSync.Accept);
+
+            // Arbitrary extra headers sent on every request.
+            foreach (var (name, value) in petSync.Headers)
+                client.DefaultRequestHeaders.TryAddWithoutValidation(name, value);
+        })
+        .ConfigurePrimaryHttpMessageHandler(() =>
+        {
+            // Handler-level transport options: pre-emptive auth and mutual-TLS certs.
+            var handler = new HttpClientHandler { PreAuthenticate = petSync.PreAuthenticate };
+            foreach (var cert in petSync.ClientCertificates)
+            {
+                if (string.IsNullOrWhiteSpace(cert.Path))
+                    continue;
+                handler.ClientCertificates.Add(new X509Certificate2(cert.Path, cert.Password));
+            }
+            if (handler.ClientCertificates.Count > 0)
+                handler.ClientCertificateOptions = ClientCertificateOption.Manual;
+            return handler;
         });
 
         // Outbound email (SMTP via System.Net.Mail). Gated by Mail:Enabled — when off,
