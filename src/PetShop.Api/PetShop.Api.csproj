@@ -21,6 +21,14 @@
     <PackageReference Include="Swashbuckle.AspNetCore" />
   </ItemGroup>
 
+  <!-- Email templates are deployed alongside the app; FileEmailTemplateRenderer reads
+       them from the app base directory (Mail:TemplatesPath, default "EmailTemplates").
+       Update (not Include) sets copy metadata on the default-globbed items, avoiding a
+       duplicate-item error. -->
+  <ItemGroup>
+    <None Update="EmailTemplates\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\PetShop.Data\PetShop.Data.csproj" />
     <ProjectReference Include="..\PetShop.Service\PetShop.Service.csproj" />

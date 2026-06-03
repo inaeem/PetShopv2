@@ -28,9 +28,40 @@ public class PetSyncSettings
     /// <summary>Per-request timeout in seconds.</summary>
     public int TimeoutSeconds { get; set; } = 10;
 
+    /// <summary>Content-Type sent on the request body. Defaults to JSON.</summary>
+    public string ContentType { get; set; } = "application/json";
+
+    /// <summary>Accept header advertised on every request. Defaults to JSON.</summary>
+    public string Accept { get; set; } = "application/json";
+
+    /// <summary>Extra headers added to every request (header name → value).</summary>
+    public Dictionary<string, string> Headers { get; set; } = new();
+
+    /// <summary>
+    /// Client certificates for mutual-TLS, supplied as PFX/PKCS#12 file paths with
+    /// an optional password. Loaded onto the HTTP handler at registration time.
+    /// </summary>
+    public List<ClientCertificateSettings> ClientCertificates { get; set; } = new();
+
+    /// <summary>
+    /// When true, the handler sends the Authorization header pre-emptively on the
+    /// first request instead of waiting for a 401 challenge.
+    /// </summary>
+    public bool PreAuthenticate { get; set; }
+
     /// <summary>Extra attempts after the first on transient failures (5xx / 408 / 429 / network).</summary>
     public int MaxRetries { get; set; } = 2;
 
     /// <summary>Base backoff between attempts in milliseconds (multiplied by the attempt number).</summary>
     public int RetryBaseDelayMs { get; set; } = 200;
+}
+
+/// <summary>A single client certificate for mutual-TLS, loaded from disk.</summary>
+public class ClientCertificateSettings
+{
+    /// <summary>Path to a PFX/PKCS#12 certificate file.</summary>
+    public string Path { get; set; } = string.Empty;
+
+    /// <summary>Optional password protecting the certificate file.</summary>
+    public string? Password { get; set; }
 }
