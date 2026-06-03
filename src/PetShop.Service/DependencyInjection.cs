@@ -22,6 +22,11 @@ public static class DependencyInjection
         services.Configure<PetSyncSettings>(configuration.GetSection(PetSyncSettings.SectionName));
         var petSync = configuration.GetSection(PetSyncSettings.SectionName).Get<PetSyncSettings>() ?? new PetSyncSettings();
 
+        // Fail fast on a malformed cert thumbprint instead of an opaque "certificate
+        // not found" on the first sync. Validates regardless of Enabled — if a cert
+        // is listed in config, it must be well-formed.
+        new Validators.PetSyncSettingsValidator().ValidateAndThrow(petSync);
+
         services.AddHttpClient<IPetSyncClient, PetSyncClient>(client =>
         {
             if (!string.IsNullOrWhiteSpace(petSync.BaseUrl))
