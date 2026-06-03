@@ -43,11 +43,7 @@ public static class DependencyInjection
             // Handler-level transport options: pre-emptive auth and mutual-TLS certs.
             var handler = new HttpClientHandler { PreAuthenticate = petSync.PreAuthenticate };
             foreach (var cert in petSync.ClientCertificates)
-            {
-                if (string.IsNullOrWhiteSpace(cert.Path))
-                    continue;
-                handler.ClientCertificates.Add(new X509Certificate2(cert.Path, cert.Password));
-            }
+                handler.ClientCertificates.Add(ResolveClientCertificate(cert));
             if (handler.ClientCertificates.Count > 0)
                 handler.ClientCertificateOptions = ClientCertificateOption.Manual;
             return handler;
@@ -64,5 +60,31 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
 
         return services;
+    }
+
+    /// <summary>
+    /// Looks up a client certificate by thumbprint in the configured X509 store.
+    /// Throws if the thumbprint is missing or no matching certificate is found, so
+    /// a misconfigured mutual-TLS setup fails fast at startup rather than per-request.
+    /// </summary>
+    private static X509Certificate2 ResolveClientCertificate(ClientCertificateSettings cert)
+    {
+        if (string.IsNullOrWhiteSpace(cert.Thumbprint))
+            throw new InvalidOperationException("PetSync client certificate is missing a Thumbprint.");
+
+        // Normalize: drop whitespace/separators so values copied from certmgr ("‎ab cd …") still match.
+        var thumbprint = new string(cert.Thumbprint.Where(char.IsLetterOrDigit).ToArray());
+
+        using var store = new X509Store(cert.StoreName, cert.StoreLocation);
+        store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
+
+        // validOnly: false so an expired-but-installed cert is still surfaced (with a clear error path).
+        var found = store.Certificates.Find(X509FindType.FindByThumbprint, thumbprint, validOnly: false);
+        if (found.Count == 0)
+            throw new InvalidOperationException(
+                $"PetSync client certificate with thumbprint '{thumbprint}' not found in " +
+                $"{cert.StoreLocation}/{cert.StoreName}.");
+
+        return found[0];
     }
 }

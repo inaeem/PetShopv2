@@ -1,3 +1,5 @@
+using System.Security.Cryptography.X509Certificates;
+
 namespace PetShop.Service.External;
 
 /// <summary>
@@ -38,8 +40,9 @@ public class PetSyncSettings
     public Dictionary<string, string> Headers { get; set; } = new();
 
     /// <summary>
-    /// Client certificates for mutual-TLS, supplied as PFX/PKCS#12 file paths with
-    /// an optional password. Loaded onto the HTTP handler at registration time.
+    /// Client certificates for mutual-TLS, resolved by thumbprint from a
+    /// <see cref="System.Security.Cryptography.X509Certificates.X509Store"/> and
+    /// loaded onto the HTTP handler at registration time.
     /// </summary>
     public List<ClientCertificateSettings> ClientCertificates { get; set; } = new();
 
@@ -56,12 +59,21 @@ public class PetSyncSettings
     public int RetryBaseDelayMs { get; set; } = 200;
 }
 
-/// <summary>A single client certificate for mutual-TLS, loaded from disk.</summary>
+/// <summary>
+/// A single client certificate for mutual-TLS, located in an
+/// <see cref="System.Security.Cryptography.X509Certificates.X509Store"/> by thumbprint.
+/// </summary>
 public class ClientCertificateSettings
 {
-    /// <summary>Path to a PFX/PKCS#12 certificate file.</summary>
-    public string Path { get; set; } = string.Empty;
+    /// <summary>
+    /// Certificate thumbprint (SHA-1) to look up in the store. Case- and
+    /// whitespace-insensitive; surrounding spaces and separators are ignored.
+    /// </summary>
+    public string Thumbprint { get; set; } = string.Empty;
 
-    /// <summary>Optional password protecting the certificate file.</summary>
-    public string? Password { get; set; }
+    /// <summary>Store to search. Defaults to <c>My</c> (the personal store).</summary>
+    public StoreName StoreName { get; set; } = StoreName.My;
+
+    /// <summary>Store location to search. Defaults to <c>CurrentUser</c>.</summary>
+    public StoreLocation StoreLocation { get; set; } = StoreLocation.CurrentUser;
 }
