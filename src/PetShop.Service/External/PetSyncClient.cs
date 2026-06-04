@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -28,10 +29,25 @@ public class PetSyncClient : IPetSyncClient
 
     public async Task<PetSyncResult> CreateAsync(Pet pet, CancellationToken ct = default)
     {
+        // Back-compat: project the remote id (data.id) onto the non-generic result.
+        var result = await CreateCoreAsync(pet, TryReadRemoteIdAsync, ct);
+        return new PetSyncResult(result.Success, result.Skipped, result.Data, result.Error);
+    }
+
+    public Task<PetSyncResult<T>> CreateAsync<T>(Pet pet, CancellationToken ct = default)
+        => CreateCoreAsync(pet, TryReadDataAsync<T>, ct);
+
+    /// <summary>
+    /// Shared POST + retry pipeline. The success body is handed to <paramref name="readData"/>,
+    /// which projects it into whatever <typeparamref name="T"/> the caller wants.
+    /// </summary>
+    private async Task<PetSyncResult<T>> CreateCoreAsync<T>(
+        Pet pet, Func<HttpResponseMessage, CancellationToken, Task<T?>> readData, CancellationToken ct)
+    {
         if (!_settings.Enabled)
         {
             _logger.LogDebug("PetSync disabled; skipping remote create for pet {PetId}", pet.Id);
-            return PetSyncResult.Disabled();
+            return PetSyncResult<T>.Disabled();
         }
 
         var payload = new PetSyncEnvelope(new PetSyncRequest(
@@ -49,28 +65,35 @@ public class PetSyncClient : IPetSyncClient
 
                 if (response.IsSuccessStatusCode)
                 {
-                    var remoteId = await TryReadRemoteIdAsync(response, ct);
+                    var data = await readData(response, ct);
                     _logger.LogInformation(
-                        "Synced pet {PetId} to remote service (remoteId={RemoteId}, attempt {Attempt}/{Attempts})",
-                        pet.Id, remoteId, attempt, attempts);
-                    return PetSyncResult.Ok(remoteId);
+                        "Synced pet {PetId} to remote service (attempt {Attempt}/{Attempts})",
+                        pet.Id, attempt, attempts);
+                    return PetSyncResult<T>.Ok(data);
                 }
 
                 var status = (int)response.StatusCode;
-                var reason = $"HTTP {status} {response.ReasonPhrase}";
                 var transient = status >= 500 || status == 408 || status == 429;
 
                 if (!transient || attempt == attempts)
                 {
+                    // Error status (4xx/5xx): the body is a fault, not a T. Status code is
+                    // the discriminator, so we read the fault shape rather than guessing.
+                    var fault = await TryReadFaultAsync(response, ct);
+                    var reason = !string.IsNullOrWhiteSpace(fault?.Message)
+                        ? $"HTTP {status}: {fault!.Message}"
+                        : $"HTTP {status} {response.ReasonPhrase}";
                     _logger.LogWarning(
                         "Remote pet create failed for pet {PetId}: {Reason} (attempt {Attempt}/{Attempts})",
                         pet.Id, reason, attempt, attempts);
-                    return PetSyncResult.Failed(reason);
+                    return PetSyncResult<T>.Failed(reason, fault);
                 }
+
+                var transientReason = $"HTTP {status} {response.ReasonPhrase}";
 
                 _logger.LogWarning(
                     "Remote pet create transient failure for pet {PetId}: {Reason}; retrying (attempt {Attempt}/{Attempts})",
-                    pet.Id, reason, attempt, attempts);
+                    pet.Id, transientReason, attempt, attempts);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -83,7 +106,7 @@ public class PetSyncClient : IPetSyncClient
                 {
                     _logger.LogWarning(ex,
                         "Remote pet create errored for pet {PetId} after {Attempts} attempt(s)", pet.Id, attempts);
-                    return PetSyncResult.Failed(ex.Message);
+                    return PetSyncResult<T>.Failed(ex.Message);
                 }
 
                 _logger.LogWarning(ex,
@@ -94,9 +117,10 @@ public class PetSyncClient : IPetSyncClient
             await Task.Delay(_settings.RetryBaseDelayMs * attempt, ct);
         }
 
-        return PetSyncResult.Failed("exhausted retries");
+        return PetSyncResult<T>.Failed("exhausted retries");
     }
 
+    /// <summary>Reads the remote id from the <c>data.id</c> property of the response.</summary>
     private async Task<string?> TryReadRemoteIdAsync(HttpResponseMessage response, CancellationToken ct)
     {
         try
@@ -108,6 +132,39 @@ public class PetSyncClient : IPetSyncClient
         {
             // The remote id is optional; a missing/non-JSON body is not a failure.
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads the fault body from an error (4xx/5xx) response. Lenient by design —
+    /// only the few guaranteed fields are bound; a missing/non-JSON body yields null.
+    /// </summary>
+    private async Task<PetSyncFault?> TryReadFaultAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            return await response.Content.ReadFromJsonAsync<PetSyncFault>(cancellationToken: ct);
+        }
+        catch (JsonException)
+        {
+            // Non-JSON/empty error body — the status code still conveys the failure.
+            return null;
+        }
+    }
+
+    /// <summary>Deserializes the response's <c>data</c> property into the caller's type.</summary>
+    private async Task<T?> TryReadDataAsync<T>(HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            var body = await response.Content
+                .ReadFromJsonAsync<PetSyncResponseEnvelope<T>>(cancellationToken: ct);
+            return body is null ? default : body.Data;
+        }
+        catch
+        {
+            // The remote payload is optional; a missing/non-JSON/mismatched body is not a failure.
+            return default;
         }
     }
 
@@ -135,4 +192,8 @@ public class PetSyncClient : IPetSyncClient
 
     private record PetSyncResponseData(
         [property: JsonPropertyName("id")] string? Id);
+
+    /// <summary>Generic response envelope — binds the "data" object to a caller-supplied type.</summary>
+    private record PetSyncResponseEnvelope<T>(
+        [property: JsonPropertyName("data")] T? Data);
 }
