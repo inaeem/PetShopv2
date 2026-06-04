@@ -20,6 +20,7 @@ public static class DependencyInjection
         // service does authorization only: a fixed service token from config is
         // sent as a bearer token on every request.
         services.Configure<PetSyncSettings>(configuration.GetSection(PetSyncSettings.SectionName));
+        services.AddTransient<PetSyncLoggingHandler>();
         var petSync = configuration.GetSection(PetSyncSettings.SectionName).Get<PetSyncSettings>() ?? new PetSyncSettings();
 
         // Fail fast on a malformed cert thumbprint instead of an opaque "certificate
@@ -43,6 +44,7 @@ public static class DependencyInjection
             foreach (var (name, value) in petSync.Headers)
                 client.DefaultRequestHeaders.TryAddWithoutValidation(name, value);
         })
+        .AddHttpMessageHandler<PetSyncLoggingHandler>()
         .ConfigurePrimaryHttpMessageHandler(() =>
         {
             // Handler-level transport options: pre-emptive auth and mutual-TLS certs.
