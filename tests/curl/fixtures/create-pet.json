@@ -1,0 +1,7 @@
+{
+  "name": "Rex",
+  "breed": "German Shepherd",
+  "price": 650,
+  "ageMonths": 8,
+  "categoryId": 1
+}
