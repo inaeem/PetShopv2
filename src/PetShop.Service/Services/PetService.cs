@@ -31,8 +31,14 @@ public class PetService : ServiceBase, IPetService
             page = page < 1 ? 1 : page;
             pageSize = pageSize is < 1 or > 100 ? 20 : pageSize;
 
+            // The caller comes from the validated token, never from client input — so the
+            // list only ever exposes the caller's own pets.
+            var email = CurrentUser.Email
+                ?? throw AppException.Unauthorized("The current user has no email claim.");
+
             var query = _uow.Pets.Query()
                 .AsNoTracking()
+                .Where(p => p.OwnerEmail == email)
                 .Include(p => p.Category)
                 .OrderBy(p => p.Id);
 
@@ -56,8 +62,24 @@ public class PetService : ServiceBase, IPetService
         {
             var pet = await _uow.Pets.GetWithCategoryAsync(id, ct)
                 ?? throw AppException.NotFound("Pet");
+            EnsureOwnedByCaller(pet);
             return pet.ToDto();
         });
+
+    /// <summary>
+    /// Authorization guard: the resource must belong to the authenticated caller.
+    /// The owner is taken from the validated token (<see cref="ICurrentUser.Email"/>),
+    /// never from client input, so a caller cannot reach another user's pet by id.
+    /// Returns 404 (not 403) so the response does not reveal that the id exists.
+    /// </summary>
+    private void EnsureOwnedByCaller(Domain.Entities.Pet pet)
+    {
+        var email = CurrentUser.Email
+            ?? throw AppException.Unauthorized("The current user has no email claim.");
+
+        if (!string.Equals(pet.OwnerEmail, email, StringComparison.OrdinalIgnoreCase))
+            throw AppException.NotFound("Pet");
+    }
 
     public Task<IReadOnlyList<PetSearchResultDto>> SearchAsync(string? term, int? categoryId, CancellationToken ct = default)
         => Measure<IReadOnlyList<PetSearchResultDto>>(nameof(SearchAsync), new { term, categoryId }, async () =>
@@ -109,6 +131,7 @@ public class PetService : ServiceBase, IPetService
         {
             var pet = await _uow.Pets.GetByIdAsync(id, ct)
                 ?? throw AppException.NotFound("Pet");
+            EnsureOwnedByCaller(pet);
 
             if (await _uow.Categories.GetByIdAsync(request.CategoryId, ct) is null)
                 throw AppException.NotFound("Category");
