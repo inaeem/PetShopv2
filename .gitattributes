@@ -1,7 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
 
-# Curl harness is Windows-native PowerShell — keep these scripts CRLF.
-*.ps1   text eol=crlf
-*.cmd   text eol=crlf
-*.bat   text eol=crlf
+# Curl harness shell scripts MUST stay LF, or CRLF breaks the bash shebang
+# (`/usr/bin/env bash^M`) in the Git Bash / VS Code terminal on Windows.
+*.sh    text eol=lf

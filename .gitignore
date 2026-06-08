@@ -21,6 +21,6 @@ logs/
 appsettings.*.local.json
 
 ## curl smoke-test harness — local config (token/cert paths), token, captured responses
-tests/curl/env.ps1
+tests/curl/env.sh
 tests/curl/token.txt
 tests/curl/responses/
