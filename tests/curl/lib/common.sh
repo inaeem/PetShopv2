@@ -12,7 +12,13 @@ LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$LIB_DIR/.." && pwd)"
 FIX="$ROOT/fixtures"
 OUT="$ROOT/responses"
-mkdir -p "$OUT"
+
+# Group = the folder the calling case lives in (cases/pets/create-pet.sh -> "pets"),
+# so each case's request/response artifacts land under responses/<group>/.
+_case_file="${BASH_SOURCE[1]:-$0}"
+GROUP="$(basename "$(dirname "$_case_file")")"
+OUT_GROUP="$OUT/$GROUP"
+mkdir -p "$OUT_GROUP"
 
 command -v curl >/dev/null || { echo "curl is required."; exit 2; }
 command -v jq   >/dev/null || { echo "jq is required (brew install jq / choco install jq / apt install jq)."; exit 2; }
@@ -71,15 +77,22 @@ pass() { echo "  [PASS] $1"; }
 fail() { echo "  [FAIL] $1"; FAILS=$((FAILS + 1)); }
 
 # call <name> <expected-status> <curl-args...>
-# Prepends the shared headers/cert options, captures the body to responses/<name>.json,
-# and asserts the HTTP status.
+# Prepends the shared headers/cert options and captures, under responses/<group>/:
+#   <name>.json     the response body only (for jq assertions)
+#   <name>.headers  the status line + response headers (curl -D)
+#   <name>.http     the complete raw response: status line + headers + blank line + body
+#   <name>.trace    the complete request AND response wire dump (curl --trace-ascii)
+# Then asserts the HTTP status.
 call() {
   local name="$1" want="$2"; shift 2
+  local b="$OUT_GROUP/$name"
   local got
-  got=$(curl -s -o "$OUT/$name.json" -w '%{http_code}' \
+  got=$(curl -s --trace-ascii "$b.trace" -D "$b.headers" -o "$b.json" -w '%{http_code}' \
         "${COMMON_ARGS[@]+"${COMMON_ARGS[@]}"}" "$@")
+  # Stitch headers + body into one raw HTTP message (the -D dump already ends in a blank line).
+  cat "$b.headers" "$b.json" > "$b.http"
   if [ "$got" = "$want" ]; then pass "$name -> $got"
-  else fail "$name expected $want, got $got (responses/$name.json)"; fi
+  else fail "$name expected $want, got $got (responses/$GROUP/$name.http)"; fi
 }
 
 # expect_json <name> <jq-filter>
@@ -87,15 +100,15 @@ call() {
 # malformed JSON, catching "returned 200 but the body wasn't the envelope".
 expect_json() {
   local name="$1" filter="$2"
-  if jq -e "$filter" "$OUT/$name.json" >/dev/null 2>&1; then pass "$name body: $filter"
-  else fail "$name body failed: $filter (responses/$name.json)"; fi
+  if jq -e "$filter" "$OUT_GROUP/$name.json" >/dev/null 2>&1; then pass "$name body: $filter"
+  else fail "$name body failed: $filter (responses/$GROUP/$name.http)"; fi
 }
 
 # new_request_body <fixture-name>   (echoes the path to a generated body)
 # Loads fixtures/<name>.json, injects the configured CATEGORY_ID, and writes the
-# body to responses/_req-<name>.json — so the harness doesn't depend on a seeded id.
+# request body to responses/<group>/<name>.request.json (so the request is captured too).
 new_request_body() {
-  local fixture="$1" path="$OUT/_req-$1.json"
+  local fixture="$1" path="$OUT_GROUP/$1.request.json"
   jq ".categoryId = $CATEGORY_ID" "$FIX/$fixture.json" > "$path"
   echo "$path"
 }
@@ -104,10 +117,10 @@ new_request_body() {
 # pre-existing pet (get / update / delete / search) so they stay self-contained.
 create_pet() {
   local body; body="$(new_request_body create-pet)"
-  curl -s -o "$OUT/_seed-pet.json" \
+  curl -s -o "$OUT_GROUP/_seed-pet.json" \
     "${COMMON_ARGS[@]+"${COMMON_ARGS[@]}"}" "${AUTH[@]}" "${JSON[@]}" \
     -X POST "$BASE/api/pets" -d @"$body"
-  jq -r '.data.id' "$OUT/_seed-pet.json"
+  jq -r '.data.id' "$OUT_GROUP/_seed-pet.json"
 }
 
 # Each case calls this last; exits non-zero if any check failed so run.sh can tally.

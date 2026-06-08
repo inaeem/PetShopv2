@@ -8,15 +8,21 @@ Windows bundles `curl`). Response bodies are validated with `jq`.
 
 ```
 tests/curl/
-├── run.sh                # runner
+├── run.sh                # runner (recursive; accepts a group folder or a single case)
 ├── lib/common.sh         # shared config + helpers (token, call, expect_json, new_request_body)
-├── cases/*.sh            # one file per use case
+├── cases/                # use cases grouped by domain folder
+│   ├── auth/             #   auth-required, mtls-handshake
+│   ├── pets/             #   create, get, update, delete, list, reject-invalid, search
+│   └── category/         #   available-by-category (GET /api/pets/mine)
 ├── fixtures/*.json       # request bodies (curl -d @file); CATEGORY_ID injected at runtime
-├── responses/            # captured response bodies (gitignored, auto-created)
+├── responses/<group>/    # captured request + response per case (gitignored, auto-created)
 ├── env.example.sh        # config template -> copy to env.sh
 ├── env.sh                # your config: base url, token, headers, certs (gitignored)
 └── token.txt             # your bearer token (gitignored; optional)
 ```
+
+Cases are grouped by domain (the folder name *is* the group), and each case's captured
+artifacts land under `responses/<group>/` — e.g. `responses/pets/create-pet.http`.
 
 ## Configuration — `env.sh`
 
@@ -58,14 +64,17 @@ Headers and cert options are applied to every request — authenticated or not.
 ## Running
 
 ```bash
-# all use cases
+# all use cases (every group)
 tests/curl/run.sh
 
+# one whole group
+tests/curl/run.sh cases/pets
+
 # selected case(s)
-tests/curl/run.sh cases/create-pet.sh cases/get-pet.sh
+tests/curl/run.sh cases/pets/create-pet.sh cases/pets/get-pet.sh
 
 # a single case directly
-tests/curl/cases/update-pet.sh
+tests/curl/cases/pets/update-pet.sh
 
 # override config inline
 BASE=http://localhost:5185 PETSHOP_TOKEN="eyJ..." tests/curl/run.sh
@@ -73,17 +82,18 @@ BASE=http://localhost:5185 PETSHOP_TOKEN="eyJ..." tests/curl/run.sh
 
 ## Use cases
 
-| Case file | What it checks |
-|-----------|----------------|
-| `auth-required` | No token → 401 envelope; valid token → 200 list |
-| `create-pet` | `POST /api/pets` → 201, body echoes the pet with an id |
-| `reject-invalid-pet` | Invalid payload → 400 with `errors` |
-| `list-pets` | A created pet appears in the paged list |
-| `get-pet` | `GET /api/pets/{id}` returns the pet |
-| `update-pet` | `PUT` changes price 650 → 700 |
-| `search-pets` | `GET /api/pets/search` (stored proc) finds it |
-| `delete-pet` | Admin `DELETE` → 200, then `GET` → 404 |
-| `mtls-handshake` | With `CLIENT_CERT_PEM` set over HTTPS: TLS handshake succeeds and the cert is accepted (skips if mTLS isn't configured) |
+| Group | Case | What it checks |
+|-------|------|----------------|
+| `auth` | `auth-required` | No token → 401 envelope; valid token → 200 list |
+| `auth` | `mtls-handshake` | With `CLIENT_CERT_PEM` set over HTTPS: TLS handshake succeeds and the cert is accepted (skips if mTLS isn't configured) |
+| `pets` | `create-pet` | `POST /api/pets` → 201, body echoes the pet with an id |
+| `pets` | `reject-invalid-pet` | Invalid payload → 400 with `errors` |
+| `pets` | `list-pets` | A created pet appears in the paged list |
+| `pets` | `get-pet` | `GET /api/pets/{id}` returns the pet |
+| `pets` | `update-pet` | `PUT` changes price 650 → 700 |
+| `pets` | `search-pets` | `GET /api/pets/search` (stored proc) finds it |
+| `pets` | `delete-pet` | Admin `DELETE` → 200, then `GET` → 404 |
+| `category` | `available-by-category` | `GET /api/pets/mine` returns the caller's available pets grouped by category |
 
 Each case is **self-contained** — those needing an existing pet create one first (via the
 `create_pet` helper), so you can run any single case in isolation and in any order.
@@ -97,9 +107,25 @@ expect_json create-pet '.success == true and .data.name == "Rex" and .data.id > 
 ```
 
 `call` sends the request (prepending the shared headers/cert options) and asserts the HTTP
-status, capturing the body to `responses/<name>.json`. `expect_json` then asserts on that body
-with a `jq` filter (and fails if it isn't valid JSON). Each case exits non-zero if any check
-fails, so `run.sh` — and CI — can gate on it.
+status. For each call it writes these under `responses/<group>/`:
+
+| File | Contents |
+|------|----------|
+| `<name>.json` | response **body** only — what `expect_json` runs `jq` against |
+| `<name>.headers` | the **status line + response headers** (`curl -D`) |
+| `<name>.http` | the **complete raw response**: status line, headers, blank line, then body |
+| `<name>.trace` | the **complete request AND response** wire dump (`curl --trace-ascii`) |
+| `<name>.request.json` | the generated **request body** (for create/update; `CATEGORY_ID` injected) |
+
+`expect_json` asserts on the body with a `jq` filter (and fails if it isn't valid JSON). Each
+case exits non-zero if any check fails, so `run.sh` — and CI — can gate on it.
+
+To grab the full raw response for one endpoint ad-hoc, `curl -i` includes the headers inline:
+
+```bash
+source tests/curl/env.sh
+curl -i -H "Authorization: Bearer $TOKEN" "$BASE/api/pets?page=1&pageSize=5"
+```
 
 ## Notes
 

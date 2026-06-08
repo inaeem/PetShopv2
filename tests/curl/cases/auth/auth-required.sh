@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Use case: the API rejects requests without a valid token, accepts them with one.
-source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"
 
-echo "[auth-required]"
+echo "[auth/auth-required]"
 # No Authorization header -> 401 envelope
 call unauth-list 401 "$BASE/api/pets?page=1&pageSize=5"
 expect_json unauth-list '.success == false and (.message | length) > 0'
