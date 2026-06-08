@@ -57,6 +57,38 @@ public class PetSyncSettings
 
     /// <summary>Base backoff between attempts in milliseconds (multiplied by the attempt number).</summary>
     public int RetryBaseDelayMs { get; set; } = 200;
+
+    /// <summary>
+    /// External FHIR endpoints, looked up at runtime by name or type
+    /// (see <see cref="IFhirEndpointResolver"/>). Names must be unique.
+    /// </summary>
+    public List<FhirEndpointSettings> Endpoints { get; set; } = new();
+}
+
+/// <summary>A single external FHIR endpoint.</summary>
+public class FhirEndpointSettings
+{
+    /// <summary>Unique, human-readable identifier used to look the endpoint up.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>FHIR capability/metadata statement URL (e.g. <c>.../fhir/metadata</c>).</summary>
+    public string MetaDataUrl { get; set; } = string.Empty;
+
+    /// <summary>OpenAPI/Swagger document URL.</summary>
+    public string SwaggerUrl { get; set; } = string.Empty;
+
+    /// <summary>Base service URL.</summary>
+    public string Url { get; set; } = string.Empty;
+
+    /// <summary>What kind of endpoint this is. Bound by name ("Provider"/"Patient").</summary>
+    public EndpointType Type { get; set; }
+}
+
+/// <summary>Classifies a configured FHIR endpoint.</summary>
+public enum EndpointType
+{
+    Provider,
+    Patient
 }
 
 /// <summary>

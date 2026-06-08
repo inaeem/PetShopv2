@@ -63,13 +63,9 @@ public static class DependencyInjection
         // Renders email bodies/subjects from on-disk templates (one folder per template).
         services.AddSingleton<IEmailTemplateRenderer, FileEmailTemplateRenderer>();
 
-        // External FHIR endpoints, resolved at runtime by name/type. Validate at startup
-        // (unique names, well-formed URLs) so a typo/duplicate fails fast rather than as an
-        // opaque error when the resolver builds its by-name index.
-        services.Configure<FhirEndpointsSettings>(configuration.GetSection(FhirEndpointsSettings.SectionName));
-        var fhirEndpoints = configuration.GetSection(FhirEndpointsSettings.SectionName).Get<FhirEndpointsSettings>()
-            ?? new FhirEndpointsSettings();
-        new Validators.FhirEndpointsSettingsValidator().ValidateAndThrow(fhirEndpoints);
+        // Resolves the FHIR endpoints configured under PetSync by name/type. Singleton:
+        // it reads the PetSyncSettings snapshot once and indexes Endpoints at construction.
+        // (The endpoints are validated by PetSyncSettingsValidator above.)
         services.AddSingleton<IFhirEndpointResolver, FhirEndpointResolver>();
 
         // Register all FluentValidation validators in this assembly.

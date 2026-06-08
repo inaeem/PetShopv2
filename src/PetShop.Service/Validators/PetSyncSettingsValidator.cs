@@ -13,7 +13,50 @@ public class PetSyncSettingsValidator : AbstractValidator<PetSyncSettings>
     public PetSyncSettingsValidator()
     {
         RuleForEach(x => x.ClientCertificates).SetValidator(new ClientCertificateSettingsValidator());
+
+        // FHIR endpoints: each must be well-formed and names must be unique, so a typo or
+        // duplicate fails fast at startup rather than as an opaque duplicate-key throw when
+        // FhirEndpointResolver builds its by-name index.
+        RuleForEach(x => x.Endpoints).SetValidator(new FhirEndpointSettingsValidator());
+        RuleFor(x => x.Endpoints)
+            .Must(HaveUniqueNames)
+            .WithMessage("PetSync FHIR endpoint names must be unique (case-insensitive).");
     }
+
+    private static bool HaveUniqueNames(List<FhirEndpointSettings> endpoints)
+    {
+        var named = endpoints.Where(e => !string.IsNullOrWhiteSpace(e.Name)).ToList();
+        return named.Select(e => e.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() == named.Count;
+    }
+}
+
+/// <summary>Validates a single configured FHIR endpoint.</summary>
+public class FhirEndpointSettingsValidator : AbstractValidator<FhirEndpointSettings>
+{
+    public FhirEndpointSettingsValidator()
+    {
+        RuleFor(x => x.Name)
+            .NotEmpty().WithMessage("PetSync FHIR endpoint Name is required.");
+
+        RuleFor(x => x.Url)
+            .NotEmpty().WithMessage("PetSync FHIR endpoint Url is required.")
+            .Must(BeAnAbsoluteUrl).WithMessage("PetSync FHIR endpoint Url must be an absolute URL.");
+
+        // Metadata/Swagger URLs are optional, but if supplied must be well-formed.
+        RuleFor(x => x.MetaDataUrl)
+            .Must(BeAnAbsoluteUrl).When(x => !string.IsNullOrWhiteSpace(x.MetaDataUrl))
+            .WithMessage("PetSync FHIR endpoint MetaDataUrl must be an absolute URL.");
+
+        RuleFor(x => x.SwaggerUrl)
+            .Must(BeAnAbsoluteUrl).When(x => !string.IsNullOrWhiteSpace(x.SwaggerUrl))
+            .WithMessage("PetSync FHIR endpoint SwaggerUrl must be an absolute URL.");
+
+        RuleFor(x => x.Type)
+            .IsInEnum().WithMessage("PetSync FHIR endpoint Type must be Provider or Patient.");
+    }
+
+    private static bool BeAnAbsoluteUrl(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out _);
 }
 
 /// <summary>Validates a single mutual-TLS client certificate reference.</summary>
