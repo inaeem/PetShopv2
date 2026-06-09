@@ -24,17 +24,30 @@ public class ExceptionHandlingMiddleware
         {
             await _next(context);
         }
+        catch (AppException appEx)
+        {
+            _logger.LogWarning("Handled domain error for {Method} {Path}: {Message}",
+                context.Request.Method, context.Request.Path, appEx.Message);
+
+            await WriteResponse(context, appEx.StatusCode, appEx.Message);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception for {Method} {Path}",
                 context.Request.Method, context.Request.Path);
 
-            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-            context.Response.ContentType = "application/json";
-
-            var payload = ApiResponse<object>.Fail("An unexpected error occurred.");
-            await context.Response.WriteAsync(JsonSerializer.Serialize(payload,
-                new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+            await WriteResponse(context, StatusCodes.Status500InternalServerError,
+                "An unexpected error occurred.");
         }
+    }
+
+    private static async Task WriteResponse(HttpContext context, int statusCode, string message)
+    {
+        context.Response.StatusCode = statusCode;
+        context.Response.ContentType = "application/json";
+
+        var payload = ApiResponse<object>.Fail(message);
+        await context.Response.WriteAsync(JsonSerializer.Serialize(payload,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)));
     }
 }
