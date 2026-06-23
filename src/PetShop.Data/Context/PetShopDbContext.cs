@@ -16,9 +16,16 @@ public class PetShopDbContext : DbContext
 
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Pet> Pets => Set<Pet>();
+    public DbSet<Plant> Plants => Set<Plant>();
+
+    /// <summary>Usage groupings; each row links to either a Pet or a Plant.</summary>
+    public DbSet<UsesGroup> UsesGroups => Set<UsesGroup>();
 
     /// <summary>Keyless result set returned by the dbo.usp_SearchPets stored procedure.</summary>
     public DbSet<PetSearchResult> PetSearchResults => Set<PetSearchResult>();
+
+    /// <summary>Keyless result set (the created plant) returned by the dbo.usp_AddPlant stored procedure.</summary>
+    public DbSet<PlantAddResult> PlantAddResults => Set<PlantAddResult>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

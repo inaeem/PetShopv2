@@ -26,6 +26,7 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
             SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
             b.Property<DateTime>("CreatedUtc").ValueGeneratedOnAdd().HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()");
             b.Property<string>("Description").HasMaxLength(500).HasColumnType("nvarchar(500)");
+            b.Property<string>("Metadata").HasColumnType("nvarchar(max)");
             b.Property<string>("Name").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
             b.HasKey("Id");
             b.HasIndex("Name").IsUnique();
@@ -36,7 +37,7 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("int");
             SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-            b.Property<int?>("AgeMonths").HasColumnType("int");
+            b.Property<int>("AgeMonths").HasColumnType("int");
             b.Property<string>("Breed").HasMaxLength(100).HasColumnType("nvarchar(100)");
             b.Property<int>("CategoryId").HasColumnType("int");
             b.Property<DateTime>("CreatedUtc").ValueGeneratedOnAdd().HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()");
@@ -52,6 +53,33 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
             b.ToTable("Pets");
         });
 
+        modelBuilder.Entity("PetShop.Domain.Entities.Plant", b =>
+        {
+            b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("int");
+            SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+            b.Property<DateTime>("CreatedUtc").ValueGeneratedOnAdd().HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()");
+            b.Property<string>("Name").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+            b.Property<decimal>("Price").HasColumnType("decimal(18,2)");
+            b.Property<string>("Species").HasMaxLength(100).HasColumnType("nvarchar(100)");
+            b.Property<DateTime?>("UpdatedUtc").HasColumnType("datetime2");
+            b.HasKey("Id");
+            b.ToTable("Plants");
+        });
+
+        modelBuilder.Entity("PetShop.Domain.Entities.UsesGroup", b =>
+        {
+            b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("int");
+            SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+            b.Property<DateTime>("CreatedUtc").ValueGeneratedOnAdd().HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()");
+            b.Property<string>("Description").HasMaxLength(500).HasColumnType("nvarchar(500)");
+            b.Property<string>("Name").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+            b.Property<int>("SubjectId").HasColumnType("int");
+            b.Property<int>("Type").HasColumnType("int");
+            b.HasKey("Id");
+            b.HasIndex("Type", "SubjectId");
+            b.ToTable("UsesGroups");
+        });
+
         modelBuilder.Entity("PetShop.Data.StoredProcedures.PetSearchResult", b =>
         {
             b.Property<int>("Id").HasColumnType("int");
@@ -60,6 +88,17 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
             b.Property<string>("Name").IsRequired().HasColumnType("nvarchar(max)");
             b.Property<decimal>("Price").HasColumnType("decimal(18,2)");
             b.Property<int>("Status").HasColumnType("int");
+            b.HasNoKey();
+            b.ToTable((string)null);
+        });
+
+        modelBuilder.Entity("PetShop.Data.StoredProcedures.PlantAddResult", b =>
+        {
+            b.Property<int>("Id").HasColumnType("int");
+            b.Property<DateTime>("CreatedUtc").HasColumnType("datetime2");
+            b.Property<string>("Name").IsRequired().HasColumnType("nvarchar(max)");
+            b.Property<decimal>("Price").HasColumnType("decimal(18,2)");
+            b.Property<string>("Species").HasColumnType("nvarchar(max)");
             b.HasNoKey();
             b.ToTable((string)null);
         });

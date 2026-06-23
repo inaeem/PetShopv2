@@ -60,10 +60,29 @@ public class PetService : ServiceBase, IPetService
     public Task<PetDto> GetByIdAsync(int id, CancellationToken ct = default)
         => Measure(nameof(GetByIdAsync), new { id }, async () =>
         {
-            var pet = await _uow.Pets.GetWithCategoryAsync(id, ct)
+            var email = CurrentUser.Email
+                ?? throw AppException.Unauthorized("The current user has no email claim.");
+
+            // Project to only the columns we need (PetDto + the OwnerEmail used for the
+            // ownership check) instead of loading the full Pet and Category entities.
+            var row = await _uow.Pets.Query()
+                .AsNoTracking()
+                .Where(p => p.Id == id)
+                .Select(p => new
+                {
+                    p.OwnerEmail,
+                    Dto = new PetDto(
+                        p.Id, p.Name, p.Breed, p.Price, p.AgeMonths, p.Status,
+                        p.CategoryId, p.Category!.Name)
+                })
+                .FirstOrDefaultAsync(ct)
                 ?? throw AppException.NotFound("Pet");
-            EnsureOwnedByCaller(pet);
-            return pet.ToDto();
+
+            // Returns 404 (not 403) so the response does not reveal that the id exists.
+            if (!string.Equals(row.OwnerEmail, email, StringComparison.OrdinalIgnoreCase))
+                throw AppException.NotFound("Pet");
+
+            return row.Dto;
         });
 
     /// <summary>
@@ -106,8 +125,20 @@ public class PetService : ServiceBase, IPetService
             var category = await _uow.Categories.GetByIdAsync(request.CategoryId, ct)
                 ?? throw AppException.NotFound("Category");
 
+            var email = CurrentUser.Email;
+
+            // Reject a pet the caller already has with the same name in the same category.
+            var isDuplicate = await _uow.Pets.Query()
+                .AsNoTracking()
+                .AnyAsync(p => p.OwnerEmail == email
+                            && p.CategoryId == request.CategoryId
+                            && p.Name == request.Name, ct);
+            if (isDuplicate)
+                throw AppException.Conflict(
+                    $"A pet named '{request.Name}' already exists in this category.");
+
             var pet = request.ToEntity();
-            pet.OwnerEmail = CurrentUser.Email;   // stamp the creator as owner (null if no email claim)
+            pet.OwnerEmail = email;   // stamp the creator as owner (null if no email claim)
             await _uow.Pets.AddAsync(pet, ct);
             await _uow.SaveChangesAsync(ct);
 

@@ -26,7 +26,8 @@ public static class MappingExtensions
         Name = r.Name,
         Breed = r.Breed,
         Price = r.Price,
-        AgeMonths = r.AgeMonths,
+        // Column is non-nullable; absent age defaults to 0 months.
+        AgeMonths = r.AgeMonths ?? 0,
         CategoryId = r.CategoryId,
         Status = PetStatus.Available
     };
@@ -36,7 +37,8 @@ public static class MappingExtensions
         pet.Name = r.Name;
         pet.Breed = r.Breed;
         pet.Price = r.Price;
-        pet.AgeMonths = r.AgeMonths;
+        // Column is non-nullable; absent age defaults to 0 months.
+        pet.AgeMonths = r.AgeMonths ?? 0;
         pet.Status = r.Status;
         pet.CategoryId = r.CategoryId;
         pet.UpdatedUtc = DateTime.UtcNow;

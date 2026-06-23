@@ -29,25 +29,25 @@ public class ExceptionHandlingMiddleware
             _logger.LogWarning("Handled domain error for {Method} {Path}: {Message}",
                 context.Request.Method, context.Request.Path, appEx.Message);
 
-            await WriteResponse(context, appEx.StatusCode, appEx.Message);
+            context.Response.StatusCode = appEx.StatusCode;
+            context.Response.ContentType = "application/json";
+
+            var payload = ApiResponse<object>.Fail(appEx.Message, new[] { appEx.Message });
+            await context.Response.WriteAsync(JsonSerializer.Serialize(payload,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception for {Method} {Path}",
                 context.Request.Method, context.Request.Path);
 
-            await WriteResponse(context, StatusCodes.Status500InternalServerError,
-                "An unexpected error occurred.");
+            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            context.Response.ContentType = "application/json";
+
+            var payload = ApiResponse<object>.Fail("An unexpected error occurred.",
+                new[] { "An unexpected error occurred." });
+            await context.Response.WriteAsync(JsonSerializer.Serialize(payload,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)));
         }
-    }
-
-    private static async Task WriteResponse(HttpContext context, int statusCode, string message)
-    {
-        context.Response.StatusCode = statusCode;
-        context.Response.ContentType = "application/json";
-
-        var payload = ApiResponse<object>.Fail(message);
-        await context.Response.WriteAsync(JsonSerializer.Serialize(payload,
-            new JsonSerializerOptions(JsonSerializerDefaults.Web)));
     }
 }

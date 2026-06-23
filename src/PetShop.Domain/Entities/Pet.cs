@@ -9,7 +9,7 @@ public class Pet
     public string Name { get; set; } = string.Empty;
     public string? Breed { get; set; }
     public decimal Price { get; set; }
-    public int? AgeMonths { get; set; }
+    public int AgeMonths { get; set; }
     public PetStatus Status { get; set; } = PetStatus.Available;
 
     /// <summary>Email of the user who owns/registered this pet. Null for legacy/unowned pets.</summary>
