@@ -21,6 +21,9 @@ public class PetShopDbContext : DbContext
     /// <summary>Usage groupings; each row links to either a Pet or a Plant.</summary>
     public DbSet<UsesGroup> UsesGroups => Set<UsesGroup>();
 
+    /// <summary>Activity/audit log; each row links to exactly one Pet, Plant, or Category.</summary>
+    public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
+
     /// <summary>Keyless result set returned by the dbo.usp_SearchPets stored procedure.</summary>
     public DbSet<PetSearchResult> PetSearchResults => Set<PetSearchResult>();
 

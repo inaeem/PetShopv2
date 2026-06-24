@@ -37,7 +37,7 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("int");
             SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-            b.Property<int>("AgeMonths").HasColumnType("int");
+            b.Property<int?>("AgeMonths").HasColumnType("int");
             b.Property<string>("Breed").HasMaxLength(100).HasColumnType("nvarchar(100)");
             b.Property<int>("CategoryId").HasColumnType("int");
             b.Property<DateTime>("CreatedUtc").ValueGeneratedOnAdd().HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()");
@@ -51,6 +51,20 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
             b.HasIndex("OwnerEmail");
             b.HasIndex("Status");
             b.ToTable("Pets");
+        });
+
+        modelBuilder.Entity("PetShop.Domain.Entities.ActivityLog", b =>
+        {
+            b.Property<long>("Id").ValueGeneratedOnAdd().HasColumnType("bigint");
+            SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+            b.Property<string>("Action").IsRequired().HasMaxLength(200).HasColumnType("nvarchar(200)");
+            b.Property<int?>("CategoryId").HasColumnType("int");
+            b.Property<DateTime>("CreatedUtc").ValueGeneratedOnAdd().HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()");
+            b.Property<int?>("PetId").HasColumnType("int");
+            b.HasKey("Id");
+            b.HasIndex("CategoryId");
+            b.HasIndex("PetId");
+            b.ToTable("ActivityLogs");
         });
 
         modelBuilder.Entity("PetShop.Domain.Entities.Plant", b =>
@@ -101,6 +115,16 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
             b.Property<string>("Species").HasColumnType("nvarchar(max)");
             b.HasNoKey();
             b.ToTable((string)null);
+        });
+
+        modelBuilder.Entity("PetShop.Domain.Entities.ActivityLog", b =>
+        {
+            b.HasOne("PetShop.Domain.Entities.Pet", null)
+                .WithMany().HasForeignKey("PetId")
+                .OnDelete(DeleteBehavior.NoAction);
+            b.HasOne("PetShop.Domain.Entities.Category", null)
+                .WithMany().HasForeignKey("CategoryId")
+                .OnDelete(DeleteBehavior.NoAction);
         });
 
         modelBuilder.Entity("PetShop.Domain.Entities.Pet", b =>
