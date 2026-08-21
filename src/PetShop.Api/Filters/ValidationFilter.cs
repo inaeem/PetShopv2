@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using PetShop.Service.Common;
+using Serilog.Context;
 
 namespace PetShop.Api.Filters;
 
@@ -40,8 +41,9 @@ public class ValidationFilter : IAsyncActionFilter
         {
             // A rejected request never reaches the service layer, so without this row the
             // log shows a request arriving and a 400 leaving with nothing in between.
-            _logger.LogWarning("Validation failed for {Action}: {Errors:l}",
-                context.ActionDescriptor.DisplayName, string.Join("; ", errors));
+            using (LogContext.PushProperty("EventType", "Validation"))
+                _logger.LogWarning("Validation failed for {Action}: {Errors:l}",
+                    context.ActionDescriptor.DisplayName, string.Join("; ", errors));
 
             context.Result = new BadRequestObjectResult(
                 ApiResponse<object>.Fail("Validation failed.", errors));

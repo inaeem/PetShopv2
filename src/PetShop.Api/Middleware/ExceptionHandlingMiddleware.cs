@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PetShop.Service.Common;
+using Serilog.Context;
 
 namespace PetShop.Api.Middleware;
 
@@ -26,8 +27,9 @@ public class ExceptionHandlingMiddleware
         }
         catch (AppException appEx)
         {
-            _logger.LogWarning("Handled domain error for {Method} {Path}: {Message}",
-                context.Request.Method, context.Request.Path, appEx.Message);
+            using (LogContext.PushProperty("EventType", "DomainError"))
+                _logger.LogWarning("Handled domain error for {Method} {Path}: {Message}",
+                    context.Request.Method, context.Request.Path, appEx.Message);
 
             context.Response.StatusCode = appEx.StatusCode;
             context.Response.ContentType = "application/json";
@@ -38,8 +40,9 @@ public class ExceptionHandlingMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled exception for {Method} {Path}",
-                context.Request.Method, context.Request.Path);
+            using (LogContext.PushProperty("EventType", "Exception"))
+                _logger.LogError(ex, "Unhandled exception for {Method} {Path}",
+                    context.Request.Method, context.Request.Path);
 
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             context.Response.ContentType = "application/json";

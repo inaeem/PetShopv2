@@ -27,7 +27,9 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .Enrich.FromLogContext()
     // Stamps CorrelationId + the business identifiers (AppRegistrationId, PayerId,
     // ProviderId, UserEmail) onto every event, including values discovered mid-call.
-    .Enrich.With<RequestFieldsEnricher>());
+    .Enrich.With<RequestFieldsEnricher>()
+    // Last, so a pushed EventType wins and only unlabelled rows get the fallback.
+    .Enrich.With<EventTypeEnricher>());
 
 // ---------------------------------------------------------------------------
 // Layers
@@ -191,6 +193,7 @@ app.UseSerilogRequestLogging(options =>
         "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0} ms";
     options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
     {
+        diagnosticContext.Set("EventType", "Summary");
         diagnosticContext.Set("TraceId", httpContext.TraceIdentifier);
         diagnosticContext.Set("User", httpContext.User.Identity?.Name ?? "anonymous");
         diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc.Filters;
 using PetShop.Service.Common;
+using Serilog.Context;
 
 namespace PetShop.Api.Filters;
 
@@ -38,7 +39,8 @@ public class RequestLoggingFilter : IAsyncActionFilter
 
         // Property named StatusCode (not Status) so it maps to the same HttpStatus column
         // as the request-summary line — one concept, one property name, one column.
-        _logger.LogDebug("Action {Action} responded {StatusCode} in {Elapsed} ms",
-            action, status, sw.ElapsedMilliseconds);
+        using (LogContext.PushProperty("EventType", "Action"))
+            _logger.LogDebug("Action {Action} responded {StatusCode} in {Elapsed} ms",
+                action, status, sw.ElapsedMilliseconds);
     }
 }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using PetShop.Service.Common;
+using Serilog.Context;
 
 namespace PetShop.Api.Filters;
 
@@ -18,7 +19,11 @@ public class ApiExceptionFilter : IExceptionFilter
     {
         if (context.Exception is not AppException appEx) return;
 
-        _logger.LogWarning("Handled domain error: {Message}", appEx.Message);
+        // DomainError, not Exception: the request was refused by a business rule and the
+        // client gets a 4xx. Filtering the two apart is the difference between "callers are
+        // sending bad requests" and "we are broken".
+        using (LogContext.PushProperty("EventType", "DomainError"))
+            _logger.LogWarning("Handled domain error: {Message}", appEx.Message);
 
         context.Result = new ObjectResult(ApiResponse<object>.Fail(appEx.Message))
         {

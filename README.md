@@ -376,7 +376,7 @@ onto its column:
 | `LogId` / `LoggedAtUtc` / `Severity` | standard | identity, UTC timestamp, level |
 | `LogMessage` | standard `Message` | the rendered line — **including the endpoint and the request/response body** |
 | `ErrorDetail` | standard `Exception` | stack trace |
-| `EventType` | `EventType` | `Request`, `Response`, `Enter`, `Exit`, `ExternalRequest`, `ExternalResponse`, `Sql`, `Domain` |
+| `EventType` | `EventType` | never NULL — see the taxonomy below |
 | `Source` | `SourceContext` | the class that wrote the row |
 | `Operation` | `Operation` | controller action or `Class.Method` being executed |
 | `DurationMs` | `Elapsed` | elapsed milliseconds |
@@ -426,9 +426,11 @@ middleware when an endpoint names a segment differently.
 | Layer | Written by | `EventType` | Switch |
 |---|---|---|---|
 | HTTP in/out + bodies | `HttpPayloadLoggingMiddleware` | `Request` / `Response` | always |
-| Validation rejects | `ValidationFilter` | — (Warning) | always |
-| Unhandled errors | `ExceptionHandlingMiddleware` | — (Error) | always |
-| Request summary | `UseSerilogRequestLogging` | — | always |
+| Validation rejects | `ValidationFilter` | `Validation` (Warning) | always |
+| Business-rule refusals (4xx) | `ApiExceptionFilter`, `ExceptionHandlingMiddleware` | `DomainError` (Warning) | always |
+| Unhandled errors (5xx) | `ExceptionHandlingMiddleware` | `Exception` (Error) | always |
+| Action completion | `RequestLoggingFilter` | `Action` | always |
+| Request summary | `UseSerilogRequestLogging` | `Summary` | always |
 | Service methods | `ServiceBase.Measure` → `LayerTracer` | `Enter` / `Exit` | `Service` |
 | Repository calls | `Repository.Measure` → `LayerTracer` | `Enter` / `Exit` | `Data` |
 | Commit | `UnitOfWork.SaveChangesAsync` | `Enter` / `Exit` | `Data` |
@@ -441,6 +443,31 @@ middleware when an endpoint names a segment differently.
 `Domain` rows: the change tracker knows which entity changed, in which direction, and
 which properties moved — the same information a domain event would carry, without
 putting a logger in the domain.
+
+### `EventType` taxonomy
+
+| Value | Written when |
+|---|---|
+| `Request` / `Response` | an HTTP call arrives / its response is sent, body included |
+| `Enter` / `Exit` | a traced function is entered / returns (`Exit` also carries `DurationMs`) |
+| `ExternalRequest` / `ExternalResponse` | an outbound partner API call and its reply |
+| `Sql` | one SQL statement executed by EF |
+| `Domain` | one entity inserted, updated or deleted |
+| `Validation` | a request refused by FluentValidation |
+| `DomainError` | a business rule refused the request (`AppException` → 4xx) |
+| `Exception` | an unhandled exception (5xx), stack trace in `ErrorDetail` |
+| `Action` | the controller action completed, with its status |
+| `Summary` | the one-per-request completion line |
+| `Business` | anything else the application logs |
+
+The column is **never NULL**. Writers push their own value; `EventTypeEnricher` fills the
+gap for everything else — `Exception` when the event carries an exception or is Error and
+above, `Business` otherwise. It is registered last in `Program.cs` so a pushed value always
+wins.
+
+`DomainError` and `Exception` are kept apart on purpose: the first means callers are
+sending requests the rules reject, the second means the application is broken. Alerting on
+the second without drowning in the first depends on that split.
 
 ### Configuring it
 
