@@ -12,14 +12,29 @@ public class Repository<T> : IRepository<T> where T : class
     protected readonly DbSet<T> Set;
     protected readonly ILayerTracer Tracer;
 
-    // Category shown as the trace line's SourceContext, e.g. "PetShop.Data.Repository<Pet>".
-    private readonly string _category = $"PetShop.Data.Repository<{typeof(T).Name}>";
+    // Category shown as the trace line's SourceContext. Derived from the CONCRETE type, so a
+    // call into PetRepository is logged as "PetShop.Data.PetRepository" rather than as the
+    // base "PetShop.Data.Repository<Pet>" — otherwise every derived repository disappears
+    // behind the generic name and can't be found in the log table. Set in the constructor
+    // because a field initializer cannot call GetType().
+    private readonly string _category;
 
     public Repository(PetShopDbContext db, ILayerTracer tracer)
     {
         Db = db;
         Set = db.Set<T>();
         Tracer = tracer;
+        _category = $"PetShop.Data.{FriendlyTypeName(GetType())}";
+    }
+
+    /// <summary>"PetRepository", or "Repository&lt;Pet&gt;" when the generic base is used directly.</summary>
+    private static string FriendlyTypeName(Type type)
+    {
+        if (!type.IsGenericType) return type.Name;
+
+        var name = type.Name[..type.Name.IndexOf('`')];
+        var arguments = string.Join(", ", type.GetGenericArguments().Select(a => a.Name));
+        return $"{name}<{arguments}>";
     }
 
     /// <summary>Wraps a value-returning data call in a data-layer trace scope.</summary>

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using PetShop.Service.Common;
+using Serilog.Context;
 
 namespace PetShop.Api.Middleware;
 
@@ -40,6 +41,14 @@ public class CorrelationIdMiddleware
             return Task.CompletedTask;
         });
 
-        await _next(context);
+        // Two independent paths carry the id onto log events: this push (read by
+        // Enrich.FromLogContext) and RequestFieldsEnricher reading the bag above. Either
+        // alone is enough, and they can't disagree — same variable. Keeping both means a
+        // missing enricher registration, or code that starts a fresh bag mid-request,
+        // can't silently blank out the CorrelationRef column.
+        using (LogContext.PushProperty("CorrelationId", correlationId))
+        {
+            await _next(context);
+        }
     }
 }

@@ -60,7 +60,8 @@ PetShop.sln
   (`401`/`403`) instead of empty bodies.
 - **Filters** — global action filters (request logging, validation) + an exception
   filter for domain errors; a last-resort exception middleware for everything else.
-- **Logging** — Serilog (console + rolling file), a correlation id per request, and
+- **Logging** — Serilog (console + rolling file + the `dbo.AppLogs` table), a
+  server-generated correlation id per request, request/response bodies, and
   configurable per-layer entry/exit tracing.
 
 **Response envelope** — every endpoint returns:
@@ -69,10 +70,14 @@ PetShop.sln
 { "success": true, "message": null, "data": { }, "errors": null }
 ```
 
-**Request pipeline** (outer → inner): correlation id → exception handler →
-request logging → Swagger (Dev/QA) → static files → CORS → authentication →
-authorization → controllers. A failure is handled at the first matching stage, so
-the layer that reports it tells you where it failed.
+**Request pipeline** (outer → inner): correlation id → routing → request/response
+payload logging → exception handler → request logging → Swagger (Dev/QA) → static
+files → CORS → authentication → authorization → controllers. A failure is handled at
+the first matching stage, so the layer that reports it tells you where it failed.
+
+Two placements in that order are deliberate: payload logging sits **after** routing so
+it can name the controller action it is logging for, and **outside** the exception
+handler so its response row records the real status and error body of a failed request.
 
 ---
 
@@ -226,7 +231,8 @@ store — the JSON only documents the shape.
 
 The **sinks are configured once in base** (`Serilog:WriteTo` → Console + rolling File
 at `logs/petshop-*.log`, 7-day retention, `CorrelationId`/`SourceContext` in the
-template, `Enrich:FromLogContext`). Environment files override **only `MinimumLevel`**:
+template, plus the `MSSqlServer` sink writing `dbo.AppLogs`; `Enrich:FromLogContext`).
+Environment files override **only `MinimumLevel`**:
 
 | Env | Default level | `Microsoft.AspNetCore` | EF `Database.Command` |
 |-----|---------------|------------------------|-----------------------|
@@ -235,10 +241,17 @@ template, `Enrich:FromLogContext`). Environment files override **only `MinimumLe
 | QA | Debug | Information | Information |
 | Production | Information | Warning | Warning |
 
-To see the SQL EF emits, lower `Serilog:MinimumLevel:Override:Microsoft.EntityFrameworkCore.Database.Command`
-to `Information` (already the case in QA). Serilog reads this config in `Program.cs`
-via `ReadFrom.Configuration(...)`, so no redeploy is needed to change levels — just
-the env file or an env-var override.
+Serilog reads this config in `Program.cs` via `ReadFrom.Configuration(...)`, so no
+redeploy is needed to change levels — just the env file or an env-var override.
+
+The SQL sink deliberately has **no `restrictedToMinimumLevel`**, so it follows the
+table above: Debug rows locally, Information and up in QA/Production. Its connection
+string is the **name** `PetShopDb`, resolved against `ConnectionStrings` in the same
+configuration — so each environment's database is used automatically, and the
+credentials live in exactly one place (see [Connection-string pattern](#connection-string-pattern)).
+
+To see the SQL statements EF emits, prefer `Diagnostics:LayerTracing:Sql` over the EF
+logger category — see [Logging & diagnostics](#logging--diagnostics).
 
 ---
 
@@ -348,18 +361,141 @@ It is **not** a separate app — run the API and open the root URL (e.g.
 
 ## Logging & diagnostics
 
-- **Serilog** → console + rolling file (`logs/petshop-*.log`, 7 days), configured in
-  `appsettings*.json`. Each line shows the `CorrelationId` and `SourceContext`.
-- **Correlation id** per request (honours an inbound `X-Correlation-ID`, else the
-  trace id) is pushed onto every log line and echoed back in the response header.
-- **Per-layer tracing** — configurable entry/exit `Debug` logs for the service and
-  data layers via `Diagnostics:LayerTracing` (toggle at runtime; gated by the
-  `Debug` level). A faulted call is flagged on its exit line with the exception type,
-  so the deepest `FAULTED` line pinpoints the originating layer.
+Three sinks: **console**, a **rolling file** (`logs/petshop-*.log`, 7 days) and the
+**`dbo.AppLogs` table**, all configured in `appsettings*.json`.
+
+### The log table
+
+`dbo.AppLogs` is written by the Serilog `MSSqlServer` sink (batched `SqlBulkCopy`,
+outside EF and outside any transaction). Column names are the application's, not
+Serilog's — `columnOptionsSection` in `appsettings.json` maps each log-event property
+onto its column:
+
+| Column | Fed by property | Holds |
+|---|---|---|
+| `LogId` / `LoggedAtUtc` / `Severity` | standard | identity, UTC timestamp, level |
+| `LogMessage` | standard `Message` | the rendered line — **including the endpoint and the request/response body** |
+| `ErrorDetail` | standard `Exception` | stack trace |
+| `EventType` | `EventType` | `Request`, `Response`, `Enter`, `Exit`, `ExternalRequest`, `ExternalResponse`, `Sql`, `Domain` |
+| `Source` | `SourceContext` | the class that wrote the row |
+| `Operation` | `Operation` | controller action or `Class.Method` being executed |
+| `DurationMs` | `Elapsed` | elapsed milliseconds |
+| `HttpStatus` | `StatusCode` | status of a response or external reply |
+| `CorrelationRef` | `CorrelationId` | ties every row of one request together |
+| `AppRegistrationId` / `PayerId` / `ProviderId` / `UserEmail` | same names | business identifiers |
+
+Adding a column means three edits that must agree: the migration DDL, the
+`AppLogConfiguration` mapping, and the sink's `columnOptionsSection`. `AppLog` +
+`PetShopDbContext.AppLogs` exist so the app can **read** its own logs — always
+`AsNoTracking`, never `SaveChanges`.
+
+### Correlation
+
+`CorrelationIdMiddleware` generates the id **server-side** (`Activity.Current.TraceId`,
+falling back to `HttpContext.TraceIdentifier`) and ignores any inbound header — a
+client-supplied id can collide between callers or be forged into someone else's
+history. It is still echoed back as `X-Correlation-ID` for support tickets, and
+forwarded on outbound PetSync calls so the partner's logs line up with ours.
+
+The id is ambient: pushed once at the top of the pipeline, it reaches every log line
+in the request — controller, service, repository, SQL interceptor, HTTP handler —
+without being passed as a parameter. One query gives the whole request:
+
+```sql
+SELECT LogId, Severity, EventType, Source, Operation, LogMessage, DurationMs, ErrorDetail
+FROM   dbo.AppLogs WHERE CorrelationRef = @id ORDER BY LogId;
+```
+
+### Business identifiers
+
+`RequestLogContext` (in `PetShop.Service.Common`) is one mutable bag per request that
+`RequestFieldsEnricher` reads at write time. `HttpPayloadLoggingMiddleware` seeds it
+from **route values first, then the query string, then the top-level JSON body**;
+anything only known later is set mid-call with no `using` block:
+
+```csharp
+RequestLogContext.Set(fields => fields.ProviderId = payer.ProviderId);
+```
+
+Rows written before a value was known carry `NULL` there — they're still joined to the
+rest by `CorrelationRef`. Add a route-parameter spelling to `BusinessFields` in the
+middleware when an endpoint names a segment differently.
+
+### What gets captured, layer by layer
+
+| Layer | Written by | `EventType` | Switch |
+|---|---|---|---|
+| HTTP in/out + bodies | `HttpPayloadLoggingMiddleware` | `Request` / `Response` | always |
+| Validation rejects | `ValidationFilter` | — (Warning) | always |
+| Unhandled errors | `ExceptionHandlingMiddleware` | — (Error) | always |
+| Request summary | `UseSerilogRequestLogging` | — | always |
+| Service methods | `ServiceBase.Measure` → `LayerTracer` | `Enter` / `Exit` | `Service` |
+| Repository calls | `Repository.Measure` → `LayerTracer` | `Enter` / `Exit` | `Data` |
+| Commit | `UnitOfWork.SaveChangesAsync` | `Enter` / `Exit` | `Data` |
+| Entity changes | EF change tracker, read in `SaveChangesAsync` | `Domain` | `Data` |
+| SQL statements | `SqlCommandLoggingInterceptor` | `Sql` | `Sql` |
+| Outbound partner API | `PetSyncLoggingHandler` | `ExternalRequest` / `ExternalResponse` | always |
+| Outbound SMTP | `SmtpEmailSender` | `Enter` / `Exit` | `External` |
+
+`PetShop.Domain` has no dependencies and cannot log for itself. Its footprint is the
+`Domain` rows: the change tracker knows which entity changed, in which direction, and
+which properties moved — the same information a domain event would carry, without
+putting a logger in the domain.
+
+### Configuring it
 
 ```jsonc
-"Diagnostics": { "LayerTracing": { "Enabled": true, "Service": true, "Data": true, "IncludeArguments": false } }
+"Diagnostics": {
+  "LayerTracing": {
+    "Enabled": true,            // master switch
+    "Service": true,            // service-layer enter/exit
+    "Data": true,               // repositories, unit of work, Domain rows
+    "External": true,           // SMTP and other outbound integrations
+    "Sql": false,               // every SQL statement — highest volume, off by default
+    "Level": "Information",     // so the call path is captured in QA and Production too
+    "IncludeArguments": false   // method args, return values, SQL parameter VALUES — PII
+  }
+}
 ```
+
+Bound via `IOptionsMonitor`, so every flag takes effect on the next call — **no
+restart**. The SQL interceptor is always attached and decides per command whether to
+write, so `Sql` can be flipped in a live environment.
+
+| | Base | Development | QA | Production |
+|---|---|---|---|---|
+| `Sql` | `false` | **`true`** | inherits | inherits |
+| `IncludeArguments` | `false` | **`true`** | inherits | inherits |
+
+`Level` is `Information` by default on purpose: the trace lines used to be `Debug`,
+which Production's `Information` minimum filtered out entirely. A faulted call is
+always reported at `Warning` regardless of `Level`, with the exception type on its exit
+line — the deepest `FAULTED` line pinpoints the originating layer. SQL parameter
+**names** always appear; **values** follow `IncludeArguments`.
+
+Bodies are truncated at 4 000 characters, and requests to credential paths
+(`/auth`, `/token`, `/login`, `/password`) are logged as `[redacted]`.
+
+### Retention
+
+Nothing prunes the table. `IX_AppLogs_LoggedAtUtc` exists for it:
+
+```sql
+DELETE TOP (50000) FROM dbo.AppLogs WHERE LoggedAtUtc < DATEADD(day, -30, SYSUTCDATETIME());
+```
+
+### When a column is unexpectedly NULL
+
+Turn on the sink's own diagnostics — a failed insert or an unresolved connection-string
+name is reported there and nowhere else:
+
+```csharp
+Serilog.Debugging.SelfLog.Enable(Console.Error);   // top of Program.cs
+```
+
+Most common cause of a `NULL` custom column is a property that never reached the event:
+`$"…{id}…"` string interpolation produces **no** properties, and placeholder names are
+matched case-sensitively against `PropertyName`.
 
 ---
 
@@ -377,6 +513,12 @@ run against a database that already has the schema.
 | `20260101000100_AddSearchPetsProcedure` | Creates `dbo.usp_SearchPets`. |
 | `20260101000200_DropOrderTables` | Drops the legacy `Customers`, `Orders`, `OrderItems` tables (scope is now Pets-only). Guarded with `IF OBJECT_ID` checks, so it's a no-op on a database that never had them. |
 | `20260101000300_DropUsersTable` | Drops the legacy `Users` table (the API no longer stores users — clients send an externally-issued JWT). Also `IF OBJECT_ID`-guarded, so it's a no-op where the table never existed. |
+| `20260821000000_AddAppLogsTable` | Creates `dbo.AppLogs` (the Serilog log table) plus indexes on `CorrelationRef`, `LoggedAtUtc` and `PayerId`. Rows are written by the sink, not by EF; the `AppLog` entity is read-only. |
+
+> The migrations listed above carry `[Migration]` / `[DbContext]` attributes only on
+> `AddAppLogsTable`. EF discovers migrations **by those attributes** — the earlier files
+> lack them and are therefore invisible to `dotnet ef`. Add them before relying on
+> `scripts/migrate.sh` for anything other than the log table.
 
 **Brand-new / empty database:**
 
@@ -728,6 +870,33 @@ dotnet test                        # after updating the e2e tests for your route
 ---
 
 ## Troubleshooting
+
+### No rows in `dbo.AppLogs`
+
+In order of likelihood:
+
+1. **The table doesn't exist** — the sink is configured with `autoCreateSqlTable: false`
+   on purpose. Apply `20260821000000_AddAppLogsTable`.
+2. **The level filters them out** — the sink follows `Serilog:MinimumLevel`. `Enter`/`Exit`
+   rows additionally need `Diagnostics:LayerTracing:Enabled` and a `Level` the logger
+   allows.
+3. **Something is failing silently** — logging never throws into the app, so a bad
+   connection string, a missing column or a type mismatch is reported only to
+   `Serilog.Debugging.SelfLog.Enable(Console.Error)`. Turn it on first.
+4. **You looked too soon** — the sink batches (100 events / 5 s). Rows queued at the
+   moment of a hard kill are lost; use `AuditTo` instead if that matters.
+
+### A custom column is `NULL`
+
+The property never reached the log event. Check, in this order:
+
+- `$"…{value}…"` **string interpolation** creates no properties at all — use
+  `"… {Value}", value`.
+- Placeholder names are matched **case-sensitively** against `PropertyName` in
+  `columnOptionsSection`.
+- The row may simply predate the value: `UserEmail` is set once authentication has run,
+  `ProviderId` when the service resolves it. Rows written earlier carry `NULL` and are
+  still joined to the rest by `CorrelationRef`.
 
 ### "This project was downloaded from the web" / blocked files
 

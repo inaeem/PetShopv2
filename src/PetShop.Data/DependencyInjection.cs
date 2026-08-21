@@ -17,14 +17,18 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("PetShopDb")
             ?? throw new InvalidOperationException("Connection string 'PetShopDb' is not configured.");
 
-        services.AddDbContext<PetShopDbContext>(options =>
-            options.UseSqlServer(connectionString, sql =>
-                sql.MigrationsAssembly(typeof(PetShopDbContext).Assembly.FullName)
-                   .EnableRetryOnFailure()));
-
         // Configurable per-layer entry/exit tracing (IOptionsMonitor → runtime toggle).
         services.Configure<LayerTracingOptions>(configuration.GetSection(LayerTracingOptions.SectionName));
         services.AddSingleton<ILayerTracer, LayerTracer>();
+        services.AddSingleton<SqlCommandLoggingInterceptor>();
+
+        services.AddDbContext<PetShopDbContext>((serviceProvider, options) =>
+            options.UseSqlServer(connectionString, sql =>
+                       sql.MigrationsAssembly(typeof(PetShopDbContext).Assembly.FullName)
+                          .EnableRetryOnFailure())
+                   // Always attached; it decides per command whether to write anything, so
+                   // "Diagnostics:LayerTracing:Sql" can be flipped without a restart.
+                   .AddInterceptors(serviceProvider.GetRequiredService<SqlCommandLoggingInterceptor>()));
 
         services.AddScoped<IPetRepository, PetRepository>();
         services.AddScoped<IRepository<Category>, Repository<Category>>();

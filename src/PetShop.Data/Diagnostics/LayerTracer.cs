@@ -9,10 +9,12 @@ namespace PetShop.Data.Diagnostics;
 /// <summary>
 /// Default <see cref="ILayerTracer"/>. Creates a logger whose category is the
 /// caller's class name (so the trace line's SourceContext identifies the layer)
-/// and writes "Enter"/"Exit" Debug lines with the elapsed time. A call that throws
-/// is reported as "FAULTED" with the exception type. The correlation id and the
-/// request's business identifiers flow automatically via the ambient log context, so
-/// every trace line for a request shares them.
+/// and writes "Enter"/"Exit" lines with the elapsed time, at the level configured by
+/// <see cref="LayerTracingOptions.Level"/> — Information by default, so the internal call
+/// path is captured in QA and Production and not just in verbose local runs. A call that
+/// throws is reported as "FAULTED" with the exception type, always at Warning. The
+/// correlation id and the request's business identifiers flow automatically via the
+/// ambient log context, so every trace line for a request shares them.
 /// <para>
 /// Each traced call also opens a logging scope carrying <c>Operation</c> (the
 /// class.method being executed) and <c>EventType</c>; the log sink maps those to their
@@ -85,12 +87,18 @@ public sealed class LayerTracer : ILayerTracer
         }
     }
 
-    /// <summary>Returns a logger if tracing is on for this layer and Debug is enabled; otherwise null.</summary>
+    /// <summary>
+    /// Returns a logger if tracing is on for this layer and the configured trace level is
+    /// enabled for it; otherwise null. The level is Information by default so the internal
+    /// call path is recorded in QA and Production too, not only in verbose local runs.
+    /// </summary>
     private ILogger? ResolveLogger(LayerKind layer, string category)
     {
-        if (!_options.CurrentValue.IsEnabledFor(layer)) return null;
+        var options = _options.CurrentValue;
+        if (!options.IsEnabledFor(layer)) return null;
+
         var logger = _loggerFactory.CreateLogger(category);
-        return logger.IsEnabled(LogLevel.Debug) ? logger : null;
+        return logger.IsEnabled(options.Level) ? logger : null;
     }
 
     /// <summary>Names the function being executed for every log line nested under this call.</summary>
@@ -102,33 +110,39 @@ public sealed class LayerTracer : ILayerTracer
 
     private void LogEnter(ILogger logger, string member, object? args)
     {
+        var options = _options.CurrentValue;
         using var scope = EventTypeScope(logger, "Enter");
 
-        if (_options.CurrentValue.IncludeArguments && args is not null)
-            logger.LogDebug("→ Enter {Member} {Args:l}", member, Serialize(args));
+        // The member name always goes out; arguments only when explicitly opted in, since
+        // that is where PII lives (owner emails, request DTOs).
+        if (options.IncludeArguments && args is not null)
+            logger.Log(options.Level, "→ Enter {Member} {Args:l}", member, Serialize(args));
         else
-            logger.LogDebug("→ Enter {Member}", member);
+            logger.Log(options.Level, "→ Enter {Member}", member);
     }
 
     private void LogExit(ILogger logger, string member, long startTimestamp, Exception? fault, object? result)
     {
+        var options = _options.CurrentValue;
         using var scope = EventTypeScope(logger, "Exit");
 
         var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
 
         if (fault is not null)
         {
-            logger.LogDebug("← Exit  {Member} FAULTED: {FaultType} ({Elapsed:0.0} ms)",
+            // Warning regardless of the configured level: which method faulted is worth
+            // seeing even when routine tracing is turned down.
+            logger.LogWarning("← Exit  {Member} FAULTED: {FaultType} ({Elapsed:0.0} ms)",
                 member, fault.GetType().Name, elapsedMs);
         }
-        else if (_options.CurrentValue.IncludeArguments && result is not null)
+        else if (options.IncludeArguments && result is not null)
         {
-            logger.LogDebug("← Exit  {Member} ({Elapsed:0.0} ms) {Result:l}",
+            logger.Log(options.Level, "← Exit  {Member} ({Elapsed:0.0} ms) {Result:l}",
                 member, elapsedMs, Serialize(result));
         }
         else
         {
-            logger.LogDebug("← Exit  {Member} ({Elapsed:0.0} ms)", member, elapsedMs);
+            logger.Log(options.Level, "← Exit  {Member} ({Elapsed:0.0} ms)", member, elapsedMs);
         }
     }
 

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Mail;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using PetShop.Data.Diagnostics;
 
 namespace PetShop.Service.External;
 
@@ -12,16 +13,32 @@ namespace PetShop.Service.External;
 /// </summary>
 public class SmtpEmailSender : IEmailSender
 {
+    // Trace SourceContext for the send.
+    private const string TraceCategory = "PetShop.Service.SmtpEmailSender";
+
     private readonly MailSettings _settings;
     private readonly ILogger<SmtpEmailSender> _logger;
+    private readonly ILayerTracer _tracer;
 
-    public SmtpEmailSender(IOptions<MailSettings> settings, ILogger<SmtpEmailSender> logger)
+    public SmtpEmailSender(IOptions<MailSettings> settings, ILogger<SmtpEmailSender> logger, ILayerTracer tracer)
     {
         _settings = settings.Value;
         _logger = logger;
+        _tracer = tracer;
     }
 
-    public async Task<EmailResult> SendAsync(EmailMessage message, CancellationToken ct = default)
+    /// <summary>
+    /// Sends the message, wrapped in an External-layer trace so the attempt, its duration
+    /// and its outcome are recorded alongside the request that triggered it. Gated by
+    /// "Diagnostics:LayerTracing:External"; the recipient and subject are arguments, so
+    /// they appear only when IncludeArguments is on.
+    /// </summary>
+    public Task<EmailResult> SendAsync(EmailMessage message, CancellationToken ct = default)
+        => _tracer.MeasureAsync(LayerKind.External, TraceCategory, nameof(SendAsync),
+            () => SendCoreAsync(message, ct),
+            new { message.To, message.Subject });
+
+    private async Task<EmailResult> SendCoreAsync(EmailMessage message, CancellationToken ct)
     {
         if (!_settings.Enabled)
         {

@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace PetShop.Data.Diagnostics;
 
 /// <summary>
@@ -16,8 +18,35 @@ public class LayerTracingOptions
     /// <summary>Trace the service layer.</summary>
     public bool Service { get; set; } = true;
 
-    /// <summary>Trace the data layer (repositories).</summary>
+    /// <summary>Trace the data layer (repositories, unit of work).</summary>
     public bool Data { get; set; } = true;
+
+    /// <summary>
+    /// Trace outbound integrations owned by the service layer — SMTP mail, partner APIs.
+    /// On by default: these are the calls you cannot reproduce after the fact, and they
+    /// are low-volume compared with repository traffic.
+    /// </summary>
+    public bool External { get; set; } = true;
+
+    /// <summary>
+    /// Log every SQL command EF Core executes, with its duration. Off by default: it is
+    /// the highest-volume source in the table (several statements per repository call) and
+    /// the command text is only useful when you are actually investigating the database.
+    /// Parameter values follow <see cref="IncludeArguments"/>; names are always shown.
+    /// </summary>
+    public bool Sql { get; set; }
+
+    /// <summary>
+    /// Level the enter/exit lines are written at. Information by default, so the internal
+    /// call path (which service method, which repository method, how long) is captured in
+    /// QA and Production, where the minimum level is Information. Set to "Debug" to make
+    /// tracing follow a verbose-logging switch instead of <see cref="Enabled"/>.
+    /// <para>
+    /// A call that throws is always reported at Warning regardless of this setting — a
+    /// faulted method is worth seeing even when routine tracing is turned down.
+    /// </para>
+    /// </summary>
+    public LogLevel Level { get; set; } = LogLevel.Information;
 
     /// <summary>
     /// Also log method arguments. Off by default — arguments can contain PII;
@@ -29,6 +58,8 @@ public class LayerTracingOptions
     {
         LayerKind.Service => Service,
         LayerKind.Data => Data,
+        LayerKind.External => External,
+        LayerKind.Sql => Sql,
         _ => false
     };
 }

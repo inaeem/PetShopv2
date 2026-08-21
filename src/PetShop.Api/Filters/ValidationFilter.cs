@@ -12,8 +12,13 @@ namespace PetShop.Api.Filters;
 public class ValidationFilter : IAsyncActionFilter
 {
     private readonly IServiceProvider _services;
+    private readonly ILogger<ValidationFilter> _logger;
 
-    public ValidationFilter(IServiceProvider services) => _services = services;
+    public ValidationFilter(IServiceProvider services, ILogger<ValidationFilter> logger)
+    {
+        _services = services;
+        _logger = logger;
+    }
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
@@ -33,6 +38,11 @@ public class ValidationFilter : IAsyncActionFilter
 
         if (errors.Count > 0)
         {
+            // A rejected request never reaches the service layer, so without this row the
+            // log shows a request arriving and a 400 leaving with nothing in between.
+            _logger.LogWarning("Validation failed for {Action}: {Errors:l}",
+                context.ActionDescriptor.DisplayName, string.Join("; ", errors));
+
             context.Result = new BadRequestObjectResult(
                 ApiResponse<object>.Fail("Validation failed.", errors));
             return;
