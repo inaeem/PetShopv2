@@ -58,11 +58,9 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
             b.Property<long>("Id").ValueGeneratedOnAdd().HasColumnType("bigint");
             SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
             b.Property<string>("Action").IsRequired().HasMaxLength(200).HasColumnType("nvarchar(200)");
-            b.Property<int?>("CategoryId").HasColumnType("int");
             b.Property<DateTime>("CreatedUtc").ValueGeneratedOnAdd().HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()");
             b.Property<int?>("PetId").HasColumnType("int");
             b.HasKey("Id");
-            b.HasIndex("CategoryId");
             b.HasIndex("PetId");
             b.ToTable("ActivityLogs");
         });
@@ -121,9 +119,6 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
         {
             b.HasOne("PetShop.Domain.Entities.Pet", null)
                 .WithMany().HasForeignKey("PetId")
-                .OnDelete(DeleteBehavior.NoAction);
-            b.HasOne("PetShop.Domain.Entities.Category", null)
-                .WithMany().HasForeignKey("CategoryId")
                 .OnDelete(DeleteBehavior.NoAction);
         });
 
