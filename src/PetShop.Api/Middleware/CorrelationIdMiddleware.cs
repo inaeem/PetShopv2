@@ -1,14 +1,19 @@
-using Serilog.Context;
+using System.Diagnostics;
+using PetShop.Service.Common;
 
 namespace PetShop.Api.Middleware;
 
 /// <summary>
-/// Establishes a correlation id for the request (honouring an inbound
-/// X-Correlation-ID header, otherwise the framework trace id) and pushes it into
-/// the Serilog LogContext so EVERY log line emitted while handling the request —
-/// authentication, validation, service and data layers, and the final exception
-/// handler — carries the same id. The id is also echoed back in the response
-/// header so a client/support ticket can pinpoint the exact request.
+/// Starts the per-request log context and gives it a correlation id, so EVERY log line
+/// emitted while handling the request — authentication, validation, service and data
+/// layers, outbound HttpClient calls, and the final exception handler — carries the same
+/// id and lands in the CorrelationRef column of dbo.AppLogs.
+/// <para>
+/// The id is generated server-side from ASP.NET's own request trace and is never taken
+/// from the caller: a client-supplied id can collide between callers, or be forged to
+/// bury one request's rows inside another's history. It is still echoed back in the
+/// response header so a client or support ticket can quote it.
+/// </para>
 /// </summary>
 public class CorrelationIdMiddleware
 {
@@ -19,10 +24,14 @@ public class CorrelationIdMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var correlationId =
-            context.Request.Headers.TryGetValue(HeaderName, out var inbound) && !string.IsNullOrWhiteSpace(inbound)
-                ? inbound.ToString()
-                : context.TraceIdentifier;
+        // W3C trace id when the request is traced, otherwise Kestrel's per-request id.
+        var correlationId = Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier;
+
+        // Outermost middleware, so the bag exists before anything downstream logs.
+        // Business identifiers are filled in later — from the request payload
+        // (HttpPayloadLoggingMiddleware) or mid-call by the service layer.
+        var fields = RequestLogContext.Begin();
+        fields.CorrelationId = correlationId;
 
         // Echo it back before the response body starts (works even for 401/500).
         context.Response.OnStarting(() =>
@@ -31,10 +40,6 @@ public class CorrelationIdMiddleware
             return Task.CompletedTask;
         });
 
-        // Every ILogger call nested under this scope is enriched with CorrelationId.
-        using (LogContext.PushProperty("CorrelationId", correlationId))
-        {
-            await _next(context);
-        }
+        await _next(context);
     }
 }

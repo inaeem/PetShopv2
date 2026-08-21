@@ -7,6 +7,7 @@ using Microsoft.OpenApi.Models;
 using PetShop.Api.Common;
 using PetShop.Api.Data;
 using PetShop.Api.Filters;
+using PetShop.Api.Logging;
 using PetShop.Api.Middleware;
 using PetShop.Api.Security;
 using PetShop.Data;
@@ -23,7 +24,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Configuration(context.Configuration)
     .ReadFrom.Services(services)
-    .Enrich.FromLogContext());
+    .Enrich.FromLogContext()
+    // Stamps CorrelationId + the business identifiers (AppRegistrationId, PayerId,
+    // ProviderId, UserEmail) onto every event, including values discovered mid-call.
+    .Enrich.With<RequestFieldsEnricher>());
 
 // ---------------------------------------------------------------------------
 // Layers
@@ -167,6 +171,15 @@ var app = builder.Build();
 // ---------------------------------------------------------------------------
 // Outermost: stamp every downstream log line with a shared correlation id.
 app.UseMiddleware<CorrelationIdMiddleware>();
+
+// Explicit routing so the payload logger below can name the controller/action it is
+// logging for (WebApplication would otherwise insert this itself, further out).
+app.UseRouting();
+
+// Request/response bodies. Sits OUTSIDE the exception handler on purpose, so the
+// response row records the real status and error body of a failed request.
+app.UseMiddleware<HttpPayloadLoggingMiddleware>();
+
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 // One enriched summary line per request: method, path, status, elapsed, plus

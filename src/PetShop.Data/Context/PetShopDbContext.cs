@@ -24,6 +24,14 @@ public class PetShopDbContext : DbContext
     /// <summary>Activity/audit log; each row links to exactly one Pet, Plant, or Category.</summary>
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
 
+    /// <summary>
+    /// Structured application log (dbo.AppLogs). Read-only from the app's point of view:
+    /// rows are inserted by the Serilog MSSqlServer sink, outside EF and outside any
+    /// transaction. Exposed so support/diagnostic queries can read the log through the
+    /// same context — always with AsNoTracking, and never SaveChanges.
+    /// </summary>
+    public DbSet<AppLog> AppLogs => Set<AppLog>();
+
     /// <summary>Keyless result set returned by the dbo.usp_SearchPets stored procedure.</summary>
     public DbSet<PetSearchResult> PetSearchResults => Set<PetSearchResult>();
 

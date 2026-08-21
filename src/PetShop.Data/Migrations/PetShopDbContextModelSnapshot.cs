@@ -65,6 +65,31 @@ partial class PetShopDbContextModelSnapshot : ModelSnapshot
             b.ToTable("ActivityLogs");
         });
 
+        modelBuilder.Entity("PetShop.Domain.Entities.AppLog", b =>
+        {
+            b.Property<long>("LogId").ValueGeneratedOnAdd().HasColumnType("bigint");
+            SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("LogId"));
+            b.Property<string>("AppRegistrationId").HasMaxLength(64).HasColumnType("nvarchar(64)");
+            b.Property<string>("CorrelationRef").HasMaxLength(64).HasColumnType("nvarchar(64)");
+            b.Property<double?>("DurationMs").HasColumnType("float");
+            b.Property<string>("ErrorDetail").HasColumnType("nvarchar(max)");
+            b.Property<string>("EventType").HasMaxLength(32).HasColumnType("nvarchar(32)");
+            b.Property<int?>("HttpStatus").HasColumnType("int");
+            b.Property<string>("LogMessage").HasColumnType("nvarchar(max)");
+            b.Property<DateTime>("LoggedAtUtc").HasColumnType("datetime2");
+            b.Property<string>("Operation").HasMaxLength(256).HasColumnType("nvarchar(256)");
+            b.Property<string>("PayerId").HasMaxLength(64).HasColumnType("nvarchar(64)");
+            b.Property<string>("ProviderId").HasMaxLength(64).HasColumnType("nvarchar(64)");
+            b.Property<string>("Severity").HasMaxLength(16).HasColumnType("nvarchar(16)");
+            b.Property<string>("Source").HasMaxLength(256).HasColumnType("nvarchar(256)");
+            b.Property<string>("UserEmail").HasMaxLength(256).HasColumnType("nvarchar(256)");
+            b.HasKey("LogId");
+            b.HasIndex("CorrelationRef");
+            b.HasIndex("LoggedAtUtc");
+            b.HasIndex("PayerId");
+            b.ToTable("AppLogs");
+        });
+
         modelBuilder.Entity("PetShop.Domain.Entities.Plant", b =>
         {
             b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("int");

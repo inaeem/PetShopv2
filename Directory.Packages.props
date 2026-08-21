@@ -44,6 +44,9 @@
     <PackageVersion Include="Serilog.AspNetCore" Version="8.0.3" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="5.0.1" />
     <PackageVersion Include="Serilog.Sinks.File" Version="5.0.0" />
+    <!-- 8.x is the newest major with a net8.0 target; it also pins Microsoft.Data.SqlClient
+         5.2.3, the same version already used above. 9.x/10.x move to SqlClient 6.x. -->
+    <PackageVersion Include="Serilog.Sinks.MSSqlServer" Version="8.2.2" />
   </ItemGroup>
 
   <ItemGroup Label="API surface">
