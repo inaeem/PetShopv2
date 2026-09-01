@@ -46,11 +46,24 @@ builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 // ---------------------------------------------------------------------------
 // Controllers + global filters
 // ---------------------------------------------------------------------------
-builder.Services.AddControllers(options =>
+// WithViews (rather than plain AddControllers) so the server-rendered pages under
+// Views/ can be composed through the shared _Layout master template. The JSON API
+// controllers are unaffected.
+builder.Services.AddControllersWithViews(options =>
 {
     options.Filters.Add<RequestLoggingFilter>();
     options.Filters.Add<ValidationFilter>();
     options.Filters.Add<ApiExceptionFilter>();
+});
+
+// ---------------------------------------------------------------------------
+// Output caching — keeps server-rendered pages whose content is fixed for the
+// lifetime of the process from being re-rendered on every request.
+// ---------------------------------------------------------------------------
+builder.Services.AddOutputCache(options =>
+{
+    options.AddPolicy(OutputCachePolicies.ConfiguredEndpoints,
+        policy => policy.Expire(TimeSpan.FromHours(12)));
 });
 
 // Make [ApiController] model-binding failures (malformed JSON, wrong types,
@@ -219,6 +232,9 @@ app.UseStaticFiles();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// After routing/CORS/auth, before the endpoints it serves from cache.
+app.UseOutputCache();
 
 app.MapControllers();
 

@@ -14,12 +14,15 @@ public class FhirEndpointResolver : IFhirEndpointResolver
 {
     private readonly IReadOnlyDictionary<string, FhirEndpointSettings> _byName;
     private readonly ILookup<EndpointType, FhirEndpointSettings> _byType;
+    private readonly IReadOnlyList<FhirEndpointSettings> _all;
 
     public FhirEndpointResolver(IOptions<PetSyncSettings> options)
     {
         var endpoints = options.Value.Endpoints;
         _byName = endpoints.ToDictionary(e => e.Name, StringComparer.OrdinalIgnoreCase);
         _byType = endpoints.ToLookup(e => e.Type);
+        // Copied so callers cannot mutate the bound settings list through the snapshot.
+        _all = endpoints.ToList();
     }
 
     public FhirEndpointSettings GetByName(string name) =>
@@ -32,4 +35,6 @@ public class FhirEndpointResolver : IFhirEndpointResolver
 
     public IReadOnlyList<FhirEndpointSettings> GetByType(EndpointType type) =>
         _byType[type].ToList();
+
+    public IReadOnlyList<FhirEndpointSettings> GetAll() => _all;
 }

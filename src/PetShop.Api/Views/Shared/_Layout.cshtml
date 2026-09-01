@@ -1,0 +1,29 @@
+@*
+    Master template for every server-rendered page. Pages set ViewData["Title"] and
+    supply their content through RenderBody; the optional "Scripts" section lets a page
+    add JS without every other page paying for it.
+*@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] — Pet Shop</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body>
+    <header class="topbar">
+        <h1>🐾 Pet Shop</h1>
+        <nav class="topnav">
+            <a href="~/index.html">Portal</a>
+            <a asp-controller="Endpoints" asp-action="Index">Endpoints</a>
+        </nav>
+    </header>
+
+    <main>
+        @RenderBody()
+    </main>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

@@ -1,0 +1,64 @@
+@model IReadOnlyList<FhirEndpointRowDto>
+@{
+    ViewData["Title"] = "Configured endpoints";
+
+    // Renders one URL cell. Only absolute http(s) values become links; anything else is
+    // shown as plain text so a malformed config value can't produce a junk anchor.
+    // Razor HTML-encodes @value in both the text and the href, so no manual escaping.
+    void UrlCell(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            <td></td>
+        }
+        else if (Uri.TryCreate(value, UriKind.Absolute, out var uri)
+                 && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        {
+            <td><a href="@value" target="_blank" rel="noopener noreferrer">@value</a></td>
+        }
+        else
+        {
+            <td>@value</td>
+        }
+    }
+}
+
+<section class="card">
+    <h2>FHIR endpoints</h2>
+    <p class="hint">Read from the <code>PetSync:Endpoints</code> section of appsettings.json
+        when the API starts. The list only changes when that configuration changes and the
+        API is restarted.</p>
+
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">MetaDataUrl</th>
+                    <th scope="col">SwaggerUrl</th>
+                    <th scope="col">Url</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Count == 0)
+                {
+                    <tr>
+                        <td colspan="4" class="empty">No endpoints are configured under PetSync:Endpoints.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var endpoint in Model)
+                    {
+                        <tr>
+                            <td>@endpoint.Name</td>
+                            @{ UrlCell(endpoint.MetaDataUrl); }
+                            @{ UrlCell(endpoint.SwaggerUrl); }
+                            @{ UrlCell(endpoint.Url); }
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</section>

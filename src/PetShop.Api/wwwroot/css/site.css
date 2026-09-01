@@ -29,6 +29,10 @@ body {
 .topbar h1 { margin: 0; font-size: 1.4rem; }
 .auth-status { font-size: .9rem; opacity: .9; }
 
+.topnav { display: flex; gap: 1.25rem; }
+.topnav a { color: #fff; text-decoration: none; font-size: .9rem; opacity: .9; }
+.topnav a:hover { opacity: 1; text-decoration: underline; }
+
 main {
     max-width: 900px;
     margin: 2rem auto;
@@ -93,3 +97,37 @@ button.secondary { background: #e5e7eb; color: var(--text); }
 .message-list .time { display: block; font-size: .75rem; color: var(--muted); }
 
 .hint { color: var(--muted); font-size: .85rem; }
+.hint code { background: #f3f4f6; padding: .1rem .3rem; border-radius: 4px; }
+
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.card-head h2 { margin-bottom: .5rem; }
+.back-link { color: var(--accent); text-decoration: none; font-size: .85rem; }
+.back-link:hover { text-decoration: underline; }
+
+/* Horizontal scroll on narrow screens instead of squeezing the URL columns. */
+.table-wrap { overflow-x: auto; margin-top: 1rem; }
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .85rem;
+}
+
+.data-table th, .data-table td {
+    text-align: left;
+    padding: .6rem .75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+
+.data-table th {
+    background: #f9fafb;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover td { background: #f9fafb; }
+.data-table td a { color: var(--accent); word-break: break-all; }
+.data-table .empty { color: var(--muted); text-align: center; padding: 1.25rem; }

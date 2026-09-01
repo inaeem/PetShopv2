@@ -18,4 +18,10 @@ public interface IFhirEndpointResolver
 
     /// <summary>Returns every endpoint of the given type (empty if none).</summary>
     IReadOnlyList<FhirEndpointSettings> GetByType(EndpointType type);
+
+    /// <summary>
+    /// Returns every configured endpoint, in the order they appear in configuration
+    /// (empty if none). Served from the same startup snapshot as the lookups above.
+    /// </summary>
+    IReadOnlyList<FhirEndpointSettings> GetAll();
 }
