@@ -145,13 +145,21 @@ public class PetService : ServiceBase, IPetService
             _logger.LogInformation("Created pet {PetId} ({PetName})", pet.Id, pet.Name);
 
             // Step 2 of the create flow: replicate to the external pet service.
-            // Best-effort — the pet is already persisted locally, so a remote
-            // failure is logged but does NOT fail the create (the client never
-            // throws for transport/HTTP errors).
-            var sync = await _petSync.CreateAsync(pet, ct);
-            if (!sync.Success && !sync.Skipped)
-                _logger.LogWarning(
-                    "Pet {PetId} created locally but remote sync failed: {Error}", pet.Id, sync.Error);
+            // Best-effort — the pet is already persisted locally, so a remote failure is
+            // logged but does NOT fail the create. The client reports a transport failure
+            // on the result and throws when the remote answers unusably (non-success
+            // status, or a 2xx with an empty/unreadable body), so both are handled here.
+            try
+            {
+                var sync = await _petSync.CreateAsync(pet, ct);
+                if (!sync.Success && !sync.Skipped)
+                    _logger.LogWarning(
+                        "Pet {PetId} created locally but remote sync failed: {Error}", pet.Id, sync.Error);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Pet {PetId} created locally but remote sync failed", pet.Id);
+            }
 
             pet.Category = category;
             return pet.ToDto();

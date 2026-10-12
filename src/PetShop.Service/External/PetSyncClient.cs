@@ -10,12 +10,29 @@ namespace PetShop.Service.External;
 
 /// <summary>
 /// Typed <see cref="HttpClient"/> that POSTs a newly-created pet to the external
-/// pet service. Best-effort: transient failures are retried with a small backoff,
-/// and any unrecoverable transport/HTTP error is returned on the result rather
-/// than thrown, so it can never fail the local create.
+/// pet service. Transient failures are retried with a small backoff; a remote that
+/// answers unusably — a non-success status, or a success with an empty/unreadable
+/// body — throws. Transport failures (connect errors, timeouts) are still reported
+/// on the result. Callers that must not fail for a remote problem catch around the
+/// call; see <see cref="Services.PetService"/>.
 /// </summary>
 public class PetSyncClient : IPetSyncClient
 {
+    /// <summary>camelCase, case-insensitive binding — the defaults <c>ReadFromJsonAsync</c> uses.</summary>
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// Plain-text rejections the remote answers with a 2xx status instead of an error code.
+    /// They are not JSON, so deserializing one yields an empty payload and the rejection is
+    /// lost — the success body is matched against these as text before anything is parsed.
+    /// Matched case-insensitively on a substring, since the id is appended to the message.
+    /// </summary>
+    private static readonly string[] RemoteTextRejections =
+    {
+        "Can not create duplicate client with ID",
+        "Cannot create duplicate client with ID",
+    };
+
     private readonly HttpClient _http;
     private readonly PetSyncSettings _settings;
     private readonly ILogger<PetSyncClient> _logger;
@@ -29,13 +46,13 @@ public class PetSyncClient : IPetSyncClient
 
     public async Task<PetSyncResult> CreateAsync(Pet pet, CancellationToken ct = default)
     {
-        // Back-compat: project the remote id (data.id) onto the non-generic result.
-        var result = await CreateCoreAsync(pet, TryReadRemoteIdAsync, ct);
+        // Back-compat: the remote's response body is the remote id.
+        var result = await CreateCoreAsync(pet, ReadBodyAsync, ct);
         return new PetSyncResult(result.Success, result.Skipped, result.Data, result.Error);
     }
 
     public Task<PetSyncResult<T>> CreateAsync<T>(Pet pet, CancellationToken ct = default)
-        => CreateCoreAsync(pet, TryReadDataAsync<T>, ct);
+        => CreateCoreAsync(pet, ReadTypedBodyAsync<T>, ct);
 
     /// <summary>
     /// Shared POST + retry pipeline. The success body is handed to <paramref name="readData"/>,
@@ -86,7 +103,8 @@ public class PetSyncClient : IPetSyncClient
                     _logger.LogWarning(
                         "Remote pet create failed for pet {PetId}: {Reason} (attempt {Attempt}/{Attempts})",
                         pet.Id, reason, attempt, attempts);
-                    return PetSyncResult<T>.Failed(reason, fault);
+                    throw new InvalidOperationException(
+                        $"Remote pet create failed for pet {pet.Id}: {reason}");
                 }
 
                 var transientReason = $"HTTP {status} {response.ReasonPhrase}";
@@ -120,57 +138,81 @@ public class PetSyncClient : IPetSyncClient
         return PetSyncResult<T>.Failed("exhausted retries");
     }
 
-    /// <summary>Reads the remote id from the <c>data.id</c> property of the response.</summary>
-    private async Task<string?> TryReadRemoteIdAsync(HttpResponseMessage response, CancellationToken ct)
+    /// <summary>
+    /// Reads the success body as text — no JSON parsing, no envelope digging, so the
+    /// caller gets exactly what the remote sent. Two bodies are rejected before they can
+    /// reach <see cref="PetSyncResult{T}.Ok"/>: an empty one (a 2xx with nothing in it
+    /// never says what was created), and a known plain-text rejection such as
+    /// "Can not create duplicate client with ID 42", which the remote sends on a 2xx and
+    /// which is not valid JSON — hence the text check rather than a parse.
+    /// </summary>
+    private static async Task<string?> ReadBodyAsync(HttpResponseMessage response, CancellationToken ct)
     {
+        var raw = response.Content is null ? null : await response.Content.ReadAsStringAsync(ct);
+        if (string.IsNullOrWhiteSpace(raw))
+            throw new InvalidOperationException(
+                $"Remote pet create returned HTTP {(int)response.StatusCode} with an empty body.");
+
+        raw = raw.Trim();
+
+        foreach (var rejection in RemoteTextRejections)
+            if (raw.Contains(rejection, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"Remote pet create rejected the pet (HTTP {(int)response.StatusCode}): {raw}");
+
+        return raw;
+    }
+
+    /// <summary>
+    /// Binds the success body to the caller's type. <c>string</c> is handed back verbatim;
+    /// anything else is deserialized from the whole body. An unreadable body throws rather
+    /// than quietly degrading to <c>default</c>. Goes through <see cref="ReadBodyAsync"/>,
+    /// so the empty-body and plain-text rejection checks run before anything is parsed.
+    /// </summary>
+    private static async Task<T?> ReadTypedBodyAsync<T>(HttpResponseMessage response, CancellationToken ct)
+    {
+        var raw = await ReadBodyAsync(response, ct);
+        if (raw is T text)
+            return text;
+
         try
         {
-            var body = await response.Content.ReadFromJsonAsync<PetSyncResponseEnvelope>(cancellationToken: ct);
-            return body?.Data?.Id;
+            return JsonSerializer.Deserialize<T>(raw!, JsonOptions);
         }
-        catch
+        catch (JsonException ex)
         {
-            // The remote id is optional; a missing/non-JSON body is not a failure.
-            return null;
+            throw new InvalidOperationException(
+                $"Remote pet create body could not be read as {typeof(T).Name}: {raw}", ex);
         }
     }
 
     /// <summary>
-    /// Reads the fault body from an error (4xx/5xx) response. Lenient by design —
-    /// only the few guaranteed fields are bound; a missing/non-JSON body yields null.
+    /// Reads the fault body from an error (4xx/5xx) response. Lenient by design — only the
+    /// few guaranteed fields are bound, and a missing/non-JSON body yields null so the
+    /// status code alone describes the failure. Read as text first: <c>ReadFromJsonAsync</c>
+    /// rejects any media type that isn't <c>application/json</c> (or a <c>+json</c> suffix),
+    /// and an error body is exactly where a remote is most likely to answer <c>text/html</c>.
     /// </summary>
-    private async Task<PetSyncFault?> TryReadFaultAsync(HttpResponseMessage response, CancellationToken ct)
+    private static async Task<PetSyncFault?> TryReadFaultAsync(HttpResponseMessage response, CancellationToken ct)
     {
+        var raw = response.Content is null ? null : await response.Content.ReadAsStringAsync(ct);
+        if (string.IsNullOrWhiteSpace(raw))
+            return null;
+
         try
         {
-            return await response.Content.ReadFromJsonAsync<PetSyncFault>(cancellationToken: ct);
+            return JsonSerializer.Deserialize<PetSyncFault>(raw, JsonOptions);
         }
         catch (JsonException)
         {
-            // Non-JSON/empty error body — the status code still conveys the failure.
             return null;
-        }
-    }
-
-    /// <summary>Deserializes the response's <c>data</c> property into the caller's type.</summary>
-    private async Task<T?> TryReadDataAsync<T>(HttpResponseMessage response, CancellationToken ct)
-    {
-        try
-        {
-            var body = await response.Content
-                .ReadFromJsonAsync<PetSyncResponseEnvelope<T>>(cancellationToken: ct);
-            return body is null ? default : body.Data;
-        }
-        catch
-        {
-            // The remote payload is optional; a missing/non-JSON/mismatched body is not a failure.
-            return default;
         }
     }
 
     // ---- Wire contract ----
     // Request : { "pet": { "localId", "name", "breed", "price", "ageMonths", "categoryId", "status" } }
-    // Response: { "data": { "id": "<remote id>" } }
+    // Response: the body is the remote id (taken verbatim); the generic overload binds
+    //           the whole body to T.
 
     /// <summary>Request envelope — the pet is wrapped under a "pet" property.</summary>
     private record PetSyncEnvelope(
@@ -185,15 +227,4 @@ public class PetSyncClient : IPetSyncClient
         [property: JsonPropertyName("ageMonths")] int? AgeMonths,
         [property: JsonPropertyName("categoryId")] int CategoryId,
         [property: JsonPropertyName("status")] string Status);
-
-    /// <summary>Response envelope — the created resource is nested under "data".</summary>
-    private record PetSyncResponseEnvelope(
-        [property: JsonPropertyName("data")] PetSyncResponseData? Data);
-
-    private record PetSyncResponseData(
-        [property: JsonPropertyName("id")] string? Id);
-
-    /// <summary>Generic response envelope — binds the "data" object to a caller-supplied type.</summary>
-    private record PetSyncResponseEnvelope<T>(
-        [property: JsonPropertyName("data")] T? Data);
 }

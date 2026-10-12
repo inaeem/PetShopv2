@@ -4,25 +4,27 @@ using PetShop.Domain.Entities;
 namespace PetShop.Service.External;
 
 /// <summary>
-/// Replicates a pet to the external pet service. Implementations are best-effort:
-/// they never throw for transport/HTTP errors (those are reported on
-/// <see cref="PetSyncResult"/>), so a remote failure cannot fail the local create.
-/// Genuine caller cancellation is still propagated.
+/// Replicates a pet to the external pet service. Transport errors (connect failures,
+/// timeouts) are reported on <see cref="PetSyncResult"/> rather than thrown; a remote
+/// that answers unusably — a non-success status, or a success with an empty/unreadable
+/// body — throws <see cref="InvalidOperationException"/>. Caller cancellation is
+/// propagated. Callers for whom a remote failure must not fail local work catch around
+/// the call.
 /// </summary>
 public interface IPetSyncClient
 {
     /// <summary>
-    /// Syncs the pet and returns only the remote id (read from the response's
-    /// <c>data.id</c>). Back-compat overload — equivalent to the generic form
-    /// with the remote id projected onto <see cref="PetSyncResult.RemoteId"/>.
+    /// Syncs the pet and returns the remote id — the response body, taken verbatim.
+    /// Back-compat overload — equivalent to the generic form with the body projected
+    /// onto <see cref="PetSyncResult.RemoteId"/>.
     /// </summary>
     Task<PetSyncResult> CreateAsync(Pet pet, CancellationToken ct = default);
 
     /// <summary>
-    /// Syncs the pet and deserializes the remote response's <c>data</c> property
-    /// into a caller-supplied type.
+    /// Syncs the pet and binds the remote response body to a caller-supplied type.
+    /// <c>string</c> yields the body verbatim; any other type is deserialized from it.
     /// </summary>
-    /// <typeparam name="T">The shape to bind the remote <c>data</c> object to.</typeparam>
+    /// <typeparam name="T">The shape to bind the remote response body to.</typeparam>
     Task<PetSyncResult<T>> CreateAsync<T>(Pet pet, CancellationToken ct = default);
 }
 
