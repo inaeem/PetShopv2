@@ -176,10 +176,48 @@ builder.Services.AddSwaggerGen(c =>
     if (File.Exists(xml)) c.IncludeXmlComments(xml);
 });
 
-builder.Services.AddCors(options => options.AddDefaultPolicy(p =>
-    p.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin()));
+// ---------------------------------------------------------------------------
+// CORS — a single named policy built from the "Cors" section of appsettings, so each
+// environment declares what its front-ends may do. Every key is optional: an allow-list
+// narrows that aspect of the policy, while a missing (or "*") value keeps the permissive
+// default, and the keys with no meaningful default are skipped entirely.
+// ---------------------------------------------------------------------------
+var cors = builder.Configuration.GetSection(CorsSettings.SectionName).Get<CorsSettings>()
+           ?? new CorsSettings();
+
+builder.Services.AddCors(options => options.AddPolicy(CorsPolicies.Default, policy =>
+{
+    if (cors.AllowsAnyOrigin) policy.AllowAnyOrigin();
+    else policy.WithOrigins(cors.Origins);
+
+    if (cors.AllowsAnyHeader) policy.AllowAnyHeader();
+    else policy.WithHeaders(cors.Headers);
+
+    if (cors.AllowsAnyMethod) policy.AllowAnyMethod();
+    else policy.WithMethods(cors.Methods);
+
+    // Nothing to default to — an unset list just leaves the CORS safelist in place.
+    if (cors.Exposed.Length > 0) policy.WithExposedHeaders(cors.Exposed);
+
+    // AllowCredentials cannot be combined with AllowAnyOrigin — the browser rejects the
+    // "*" origin header on a credentialed request — so it needs an explicit allow-list.
+    if (cors.AllowCredentials && !cors.AllowsAnyOrigin) policy.AllowCredentials();
+
+    if (cors.PreflightMaxAgeSeconds is > 0)
+        policy.SetPreflightMaxAge(TimeSpan.FromSeconds(cors.PreflightMaxAgeSeconds.Value));
+}));
 
 var app = builder.Build();
+
+// Record the effective CORS policy once at startup — a wide-open policy, or a credentials
+// flag that had to be dropped, is worth seeing in the logs.
+if (cors.AllowsAnyOrigin)
+    app.Logger.LogWarning("CORS: Cors:AllowedOrigins is unset or \"*\" — any origin is allowed.");
+else
+    app.Logger.LogInformation("CORS: allowed origins {AllowedOrigins}.", cors.Origins);
+
+if (cors.AllowCredentials && cors.AllowsAnyOrigin)
+    app.Logger.LogWarning("CORS: Cors:AllowCredentials ignored — it cannot be combined with an \"*\" origin.");
 
 // ---------------------------------------------------------------------------
 // Pipeline
@@ -229,7 +267,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("QA"))
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-app.UseCors();
+app.UseCors(CorsPolicies.Default);
 app.UseAuthentication();
 app.UseAuthorization();
 
